@@ -733,7 +733,14 @@ if __name__ == "__main__":
   server = ThreadingHTTPServer(("127.0.0.1", 8000), AssistantHandler)
   print("Сервер запущен на http://127.0.0.1:8000")
   server.serve_forever()
+<<<<<<< HEAD
 
 
 
 
+=======
+
+
+
+
+>>>>>>> 8e17570 (Первый коммит: добавлены все файлы)
