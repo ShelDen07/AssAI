@@ -16,69 +16,72 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script defer src="app.js"></script>
 </head>
-<body data-google-client-id="568002795902-9rujrugcspusikbb2c87gkfgdf6e3v72.apps.googleusercontent.com">
+<body data-google-client-id="568002795902-9rujrugcspusikbb2c87gkfgdf6e3v72.apps.googleusercontent.com" data-auth="required">
   <div class="orb orb-1"></div>
   <div class="orb orb-2"></div>
   <div class="mesh"></div>
 
-  <header class="topbar">
-    <div class="brand">
-      <div class="brand-mark">IA</div>
-      <div>
-        <div class="brand-title">Интеллектуальный ассистент</div>
-        <div class="brand-subtitle">Обработка пропущенных учебных дней</div>
+  <div class="auth-gate">
+    <div class="auth-card">
+      <div class="auth-lock">Доступ по Google</div>
+      <h2>Войдите в аккаунт</h2>
+      <p>После входа откроется рабочее пространство ассистента и ваши данные будут доступны на этом устройстве.</p>
+      <div class="auth-actions">
+        <div class="auth-google" id="google-button-gate"></div>
+        <div class="auth-hint" id="google-hint-gate"></div>
+        <button class="ghost auth-guest" id="btn-guest" type="button">Войти как гость</button>
       </div>
     </div>
-    <div class="topbar-right">
-      <div class="status" id="status">
-        <span class="status-dot" id="status-dot"></span>
-        <span id="status-text">Проверяем подключение к Gemini…</span>
-      </div>
-      <div class="topbar-actions">
-        <button class="theme-toggle" id="btn-theme" type="button" aria-pressed="false">
-          <span class="theme-track"></span>
-          <span class="theme-label" id="theme-label">Светлая</span>
-        </button>
-        <div class="auth">
-          <div class="auth-google" id="google-button"></div>
-          <div class="auth-user" id="auth-user" hidden>
-            <img class="auth-avatar" id="auth-avatar" alt="" />
-            <div class="auth-meta">
-              <div class="auth-name" id="auth-name">—</div>
-              <div class="auth-email" id="auth-email">—</div>
-            </div>
-          </div>
-          <button class="ghost auth-signout" id="btn-signout" type="button" hidden>Выйти</button>
-          <div class="auth-hint" id="google-hint"></div>
+  </div>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">IA</div>
+        <div>
+          <div class="brand-title">Интеллектуальный ассистент</div>
+          <div class="brand-subtitle">Обработка пропущенных учебных дней</div>
         </div>
       </div>
-    </div>
-  </header>
-
-  <main class="shell">
-    <section class="assistant-panel">
-      <div class="assistant-hero">
-        <div class="eyebrow">Голосовой веб‑ассистент</div>
-        <h1>Разговаривайте с системой учета пропусков, как с живым секретарем.</h1>
-        <p>Спросите про пропуски студента, зафиксируйте причину, получите отчет по группе — ассистент сам предложит уточняющие вопросы.</p>
+      <div class="topbar-right">
+        <div class="status" id="status">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Сервер запущен</span>
+        </div>
+        <div class="topbar-actions">
+          <button class="theme-toggle" id="btn-theme" type="button" aria-pressed="false">
+            <span class="theme-track"></span>
+            <span class="theme-label" id="theme-label">Светлая</span>
+          </button>
+          <div class="auth">
+            <div class="auth-google" id="google-button"></div>
+            <div class="auth-user" id="auth-user" hidden>
+              <img class="auth-avatar" id="auth-avatar" alt="" />
+              <div class="auth-meta">
+                <div class="auth-name" id="auth-name">—</div>
+                <div class="auth-email" id="auth-email">—</div>
+              </div>
+            </div>
+            <button class="ghost auth-signout" id="btn-signout" type="button" hidden>Выйти</button>
+            <div class="auth-hint" id="google-hint"></div>
+          </div>
+        </div>
       </div>
+    </header>
+
+    <main class="shell">
+      <section class="assistant-panel">
+        <div class="assistant-hero">
+          <div class="eyebrow">Голосовой веб‑ассистент</div>
+          <h1>Разговаривайте с системой учета пропусков, как с живым секретарем.</h1>
+          <p>Спросите про пропуски студента, зафиксируйте причину, получите отчет по группе — ассистент сам предложит уточняющие вопросы.</p>
+        </div>
 
       <div class="conversation" id="conversation">
         <div class="message assistant">
           <div class="message-role">Ассистент</div>
           <div class="message-text">Здравствуйте! Я готов вести учет пропусков. Скажите, что сделать: зафиксировать пропуск, найти студента или сформировать отчет.</div>
         </div>
-      </div>
-
-      <div class="scenario-bar">
-        <div class="scenario-label">Сценарий</div>
-        <select id="scenario-select">
-          <option value="absences_student">Пропуски студента</option>
-          <option value="record_absence">Зафиксировать пропуск</option>
-          <option value="add_student">Добавить студента</option>
-          <option value="report_group">Отчет по группе</option>
-        </select>
-        <button class="ghost" id="btn-insert">Вставить шаблон</button>
       </div>
 
       <div class="composer">
@@ -105,6 +108,25 @@
           </select>
         </label>
         <button class="ghost" id="btn-reset">Новый диалог</button>
+      </div>
+
+      <div class="quick-cards">
+        <button class="quick-card" data-prompt="Покажи пропуски студента Иванов Иван">
+          <span class="quick-title">Пропуски студента</span>
+          <span class="quick-meta">Список за выбранный период</span>
+        </button>
+        <button class="quick-card" data-prompt="Зафиксируй пропуск: Иванов Иван, 03.02.2026, 2 занятия, причина — болезнь">
+          <span class="quick-title">Новый пропуск</span>
+          <span class="quick-meta">Записать причину и дату</span>
+        </button>
+        <button class="quick-card" data-prompt="Сделай отчет по группе ИС-21 за январь 2026">
+          <span class="quick-title">Отчет по группе</span>
+          <span class="quick-meta">Сводка и риски</span>
+        </button>
+        <button class="quick-card" data-prompt="Кто в группе ПО-22 в зоне риска?">
+          <span class="quick-title">Риски по группе</span>
+          <span class="quick-meta">Топ студентов</span>
+        </button>
       </div>
     </section>
 
@@ -174,11 +196,12 @@
         <h3>Последние действия</h3>
         <div id="actions-list" class="list"></div>
       </div>
-    </aside>
-  </main>
+      </aside>
+    </main>
 
-  <footer class="footer">
-    <div>Данные сохраняются локально. Запросы отправляются в Gemini.</div>
-  </footer>
+    <footer class="footer">
+      <div>Данные сохраняются локально. Запросы отправляются в Gemini.</div>
+    </footer>
+  </div>
 </body>
 </html>

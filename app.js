@@ -29,7 +29,10 @@
   themeToggle: document.getElementById("btn-theme"),
   themeLabel: document.getElementById("theme-label"),
   googleButton: document.getElementById("google-button"),
+  googleButtonGate: document.getElementById("google-button-gate"),
   googleHint: document.getElementById("google-hint"),
+  googleHintGate: document.getElementById("google-hint-gate"),
+  btnGuest: document.getElementById("btn-guest"),
   authUser: document.getElementById("auth-user"),
   authAvatar: document.getElementById("auth-avatar"),
   authName: document.getElementById("auth-name"),
@@ -47,6 +50,7 @@ const state = {
   students: [],
   absences: [],
 };
+let micAudioContext = null;
 
 const scenarioTemplates = {
   absences_student: "Покажи пропуски студента Иванов Иван",
@@ -99,6 +103,7 @@ function decodeJwt(token) {
 }
 
 function setAuthUser(user, persist = true) {
+  document.body.dataset.auth = user ? "ready" : "required";
   if (persist) {
     if (user) {
       localStorage.setItem(GOOGLE_USER_KEY, JSON.stringify(user));
@@ -110,6 +115,7 @@ function setAuthUser(user, persist = true) {
   if (ui.authUser) ui.authUser.hidden = !user;
   if (ui.btnSignOut) ui.btnSignOut.hidden = !user;
   if (ui.googleButton) ui.googleButton.hidden = !!user;
+  if (ui.googleButtonGate) ui.googleButtonGate.hidden = !!user;
 
   if (ui.authAvatar) {
     if (user && user.picture) {
@@ -126,6 +132,7 @@ function setAuthUser(user, persist = true) {
   if (ui.authName) ui.authName.textContent = user?.name || "—";
   if (ui.authEmail) ui.authEmail.textContent = user?.email || "";
   if (ui.googleHint && user) ui.googleHint.textContent = "";
+  if (ui.googleHintGate && user) ui.googleHintGate.textContent = "";
 }
 
 function handleCredentialResponse(response) {
@@ -143,11 +150,15 @@ function initGoogle() {
   if (googleInitialized) return;
   const clientId = (document.body?.dataset.googleClientId || "").trim();
   if (!clientId || clientId === "YOUR_GOOGLE_CLIENT_ID") {
-    if (ui.googleHint) ui.googleHint.textContent = "Укажите Google Client ID в data-google-client-id.";
+    const hint = "Укажите Google Client ID в data-google-client-id.";
+    if (ui.googleHint) ui.googleHint.textContent = hint;
+    if (ui.googleHintGate) ui.googleHintGate.textContent = hint;
     return;
   }
   if (!window.google || !google.accounts || !google.accounts.id) {
-    if (ui.googleHint) ui.googleHint.textContent = "Не удалось загрузить Google Identity Services.";
+    const hint = "Не удалось загрузить Google Identity Services.";
+    if (ui.googleHint) ui.googleHint.textContent = hint;
+    if (ui.googleHintGate) ui.googleHintGate.textContent = hint;
     return;
   }
 
@@ -159,19 +170,27 @@ function initGoogle() {
     cancel_on_tap_outside: true,
   });
 
-  if (ui.googleButton) {
-    google.accounts.id.renderButton(ui.googleButton, {
+  const buttonTargets = [ui.googleButton, ui.googleButtonGate].filter(Boolean);
+  buttonTargets.forEach((target) => {
+    google.accounts.id.renderButton(target, {
       theme: "outline",
       size: "large",
       shape: "pill",
       text: "signin_with",
     });
-  }
+  });
 
   if (ui.googleHint) ui.googleHint.textContent = "";
+  if (ui.googleHintGate) ui.googleHintGate.textContent = "";
 }
 
 function initAuth() {
+  if (ui.btnGuest) {
+    ui.btnGuest.addEventListener("click", () => {
+      setAuthUser({ name: "Гость", email: "", picture: "" });
+    });
+  }
+
   if (ui.btnSignOut) {
     ui.btnSignOut.addEventListener("click", () => {
       setAuthUser(null);
@@ -201,7 +220,85 @@ function initAuth() {
 function setStatus(state, text) {
   ui.status.classList.remove("online", "error");
   if (state) ui.status.classList.add(state);
-  ui.statusText.textContent = text;
+  ui.statusText.textContent = "Сервер запущен";
+}
+
+function playMicChime() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    if (!micAudioContext) micAudioContext = new AudioContext();
+    if (micAudioContext.state === "suspended") micAudioContext.resume();
+
+    const now = micAudioContext.currentTime;
+    const master = micAudioContext.createGain();
+    master.gain.setValueAtTime(0, now);
+    master.gain.linearRampToValueAtTime(0.14, now + 0.015);
+    master.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+    master.connect(micAudioContext.destination);
+
+    const osc1 = micAudioContext.createOscillator();
+    const osc1Gain = micAudioContext.createGain();
+    osc1.type = "sine";
+    osc1.frequency.setValueAtTime(600, now);
+    osc1.frequency.exponentialRampToValueAtTime(900, now + 0.12);
+    osc1Gain.gain.setValueAtTime(0.85, now);
+    osc1.connect(osc1Gain);
+    osc1Gain.connect(master);
+    osc1.start(now);
+    osc1.stop(now + 0.4);
+
+    const osc2 = micAudioContext.createOscillator();
+    const osc2Gain = micAudioContext.createGain();
+    osc2.type = "triangle";
+    osc2.frequency.setValueAtTime(1200, now + 0.02);
+    osc2Gain.gain.setValueAtTime(0.45, now);
+    osc2.connect(osc2Gain);
+    osc2Gain.connect(master);
+    osc2.start(now + 0.02);
+    osc2.stop(now + 0.28);
+  } catch (err) {
+    // Если звук недоступен, просто пропускаем.
+  }
+}
+
+function playMicStopChime() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    if (!micAudioContext) micAudioContext = new AudioContext();
+    if (micAudioContext.state === "suspended") micAudioContext.resume();
+
+    const now = micAudioContext.currentTime;
+    const master = micAudioContext.createGain();
+    master.gain.setValueAtTime(0, now);
+    master.gain.linearRampToValueAtTime(0.12, now + 0.015);
+    master.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+    master.connect(micAudioContext.destination);
+
+    const osc1 = micAudioContext.createOscillator();
+    const osc1Gain = micAudioContext.createGain();
+    osc1.type = "sine";
+    osc1.frequency.setValueAtTime(750, now);
+    osc1.frequency.exponentialRampToValueAtTime(420, now + 0.16);
+    osc1Gain.gain.setValueAtTime(0.8, now);
+    osc1.connect(osc1Gain);
+    osc1Gain.connect(master);
+    osc1.start(now);
+    osc1.stop(now + 0.36);
+
+    const osc2 = micAudioContext.createOscillator();
+    const osc2Gain = micAudioContext.createGain();
+    osc2.type = "triangle";
+    osc2.frequency.setValueAtTime(520, now + 0.03);
+    osc2Gain.gain.setValueAtTime(0.35, now);
+    osc2.connect(osc2Gain);
+    osc2Gain.connect(master);
+    osc2.start(now + 0.03);
+    osc2.stop(now + 0.26);
+  } catch (err) {
+    // Если звук недоступен, просто пропускаем.
+  }
 }
 
 function appendMessage(role, text, options = {}) {
@@ -508,6 +605,15 @@ function bindShortcuts() {
     });
   });
 
+  document.querySelectorAll(".quick-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const prompt = card.dataset.prompt || "";
+      if (!prompt) return;
+      ui.userInput.value = prompt;
+      sendMessage(prompt);
+    });
+  });
+
   if (ui.btnInsert) {
     ui.btnInsert.addEventListener("click", () => {
       const key = ui.scenarioSelect ? ui.scenarioSelect.value : "record_absence";
@@ -579,6 +685,7 @@ function setupSpeechRecognition() {
 
   ui.btnMic.addEventListener("click", () => {
     if (recognitionActive) return;
+    playMicChime();
     const recognition = new SpeechRecognition();
     recognition.lang = "ru-RU";
     recognition.interimResults = true;
@@ -602,6 +709,7 @@ function setupSpeechRecognition() {
     recognition.onend = () => {
       recognitionActive = false;
       ui.btnMic.classList.remove("listening");
+      playMicStopChime();
       if (ui.autoSend.checked && ui.userInput.value.trim()) {
         sendMessage(ui.userInput.value);
       }
@@ -610,6 +718,7 @@ function setupSpeechRecognition() {
     recognition.onerror = () => {
       recognitionActive = false;
       ui.btnMic.classList.remove("listening");
+      playMicStopChime();
     };
 
     recognition.start();
