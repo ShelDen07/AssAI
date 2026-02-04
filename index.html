@@ -1,0 +1,184 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Веб-ассистент пропусков</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    (function () {
+      const stored = localStorage.getItem("assistant_theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const theme = stored || (prefersDark ? "dark" : "light");
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script defer src="app.js"></script>
+</head>
+<body data-google-client-id="568002795902-9rujrugcspusikbb2c87gkfgdf6e3v72.apps.googleusercontent.com">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="mesh"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">IA</div>
+      <div>
+        <div class="brand-title">Интеллектуальный ассистент</div>
+        <div class="brand-subtitle">Обработка пропущенных учебных дней</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="status" id="status">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">Проверяем подключение к Gemini…</span>
+      </div>
+      <div class="topbar-actions">
+        <button class="theme-toggle" id="btn-theme" type="button" aria-pressed="false">
+          <span class="theme-track"></span>
+          <span class="theme-label" id="theme-label">Светлая</span>
+        </button>
+        <div class="auth">
+          <div class="auth-google" id="google-button"></div>
+          <div class="auth-user" id="auth-user" hidden>
+            <img class="auth-avatar" id="auth-avatar" alt="" />
+            <div class="auth-meta">
+              <div class="auth-name" id="auth-name">—</div>
+              <div class="auth-email" id="auth-email">—</div>
+            </div>
+          </div>
+          <button class="ghost auth-signout" id="btn-signout" type="button" hidden>Выйти</button>
+          <div class="auth-hint" id="google-hint"></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="assistant-panel">
+      <div class="assistant-hero">
+        <div class="eyebrow">Голосовой веб‑ассистент</div>
+        <h1>Разговаривайте с системой учета пропусков, как с живым секретарем.</h1>
+        <p>Спросите про пропуски студента, зафиксируйте причину, получите отчет по группе — ассистент сам предложит уточняющие вопросы.</p>
+      </div>
+
+      <div class="conversation" id="conversation">
+        <div class="message assistant">
+          <div class="message-role">Ассистент</div>
+          <div class="message-text">Здравствуйте! Я готов вести учет пропусков. Скажите, что сделать: зафиксировать пропуск, найти студента или сформировать отчет.</div>
+        </div>
+      </div>
+
+      <div class="scenario-bar">
+        <div class="scenario-label">Сценарий</div>
+        <select id="scenario-select">
+          <option value="absences_student">Пропуски студента</option>
+          <option value="record_absence">Зафиксировать пропуск</option>
+          <option value="add_student">Добавить студента</option>
+          <option value="report_group">Отчет по группе</option>
+        </select>
+        <button class="ghost" id="btn-insert">Вставить шаблон</button>
+      </div>
+
+      <div class="composer">
+        <button class="mic" id="btn-mic" title="Говорить">
+          <span class="mic-core"></span>
+        </button>
+        <div class="input-wrap">
+          <input id="user-input" type="text" placeholder="Например: Зафиксируй пропуск Иванова 03.02.2026, 2 пары, причина — болезнь" />
+          <div class="input-hint">Нажмите Enter для отправки или используйте микрофон</div>
+        </div>
+        <button class="send" id="btn-send">Отправить</button>
+      </div>
+
+      <div class="controls">
+        <label class="toggle">
+          <input type="checkbox" id="auto-send" />
+          Авто‑отправка после речи
+        </label>
+        <label class="model">
+          Режим ответа
+          <select id="response-mode">
+            <option value="brief" selected>Кратко</option>
+            <option value="detailed">Подробно</option>
+          </select>
+        </label>
+        <button class="ghost" id="btn-reset">Новый диалог</button>
+      </div>
+    </section>
+
+    <aside class="side-panel">
+      <div class="card">
+        <h3>Сводка</h3>
+        <div class="summary-grid" id="summary-grid"></div>
+      </div>
+
+      <div class="card">
+        <h3>Журнал пропусков</h3>
+        <div class="filters">
+          <input id="filter-query" type="text" placeholder="ФИО или группа" />
+          <select id="filter-group">
+            <option value="all">Все группы</option>
+          </select>
+          <select id="filter-type">
+            <option value="all">Все типы</option>
+            <option value="неуважительная">Неуважительная</option>
+            <option value="уважительная">Уважительная</option>
+            <option value="медицинская">Медицинская</option>
+          </select>
+          <input id="filter-from" type="date" />
+          <input id="filter-to" type="date" />
+          <div class="filter-actions">
+            <button class="ghost" id="btn-apply-filters">Показать</button>
+            <button class="ghost" id="btn-clear-filters">Сброс</button>
+          </div>
+        </div>
+        <div id="absences-list" class="list"></div>
+      </div>
+
+      <div class="card">
+        <h3>Быстрые команды</h3>
+        <div class="chips">
+          <button class="chip" data-prompt="Покажи пропуски студента Иванов Иван">Пропуски студента</button>
+          <button class="chip" data-prompt="Сделай отчет по группе ИС-21 за январь 2026">Отчет по группе</button>
+          <button class="chip" data-prompt="Кто в группе ПО-22 в зоне риска?">Риски по группе</button>
+          <button class="chip" data-prompt="Зафиксируй пропуск: Петров Петр, 03.02.2026, 1 занятие, причина — семейные">Добавить пропуск</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Студенты</h3>
+        <input id="student-search" type="text" placeholder="Поиск по ФИО или группе" />
+        <div id="students-list" class="list"></div>
+      </div>
+
+      <div class="card">
+        <h3>Импорт и экспорт</h3>
+        <div class="io-grid">
+          <button class="ghost" id="btn-export-students">Экспорт студентов CSV</button>
+          <label class="ghost file-label">
+            Импорт студентов CSV
+            <input type="file" id="file-import-students" accept=".csv" />
+          </label>
+          <button class="ghost" id="btn-export-absences">Экспорт пропусков CSV</button>
+          <label class="ghost file-label">
+            Импорт пропусков CSV
+            <input type="file" id="file-import-absences" accept=".csv" />
+          </label>
+        </div>
+        <div class="mini">Формат CSV можно посмотреть в README.</div>
+      </div>
+
+      <div class="card">
+        <h3>Последние действия</h3>
+        <div id="actions-list" class="list"></div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <div>Данные сохраняются локально. Запросы отправляются в Gemini.</div>
+  </footer>
+</body>
+</html>
