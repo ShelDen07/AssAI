@@ -300,7 +300,7 @@ def import_absences_json(data):
       count += 1
   return count
 
-(name, group, contact=""):
+def create_student(name, group, contact=""):
   with DB_LOCK:
     conn = db_connect()
     existing = conn.execute(
