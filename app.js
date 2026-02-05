@@ -586,40 +586,46 @@ function downloadBlob(blob, filename) {
   link.click();
 }
 
-async function exportCsv(type) {
+async function exportJson(type) {
   try {
     const response = await fetch(`/api/export?type=${encodeURIComponent(type)}`);
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
-      appendMessage("assistant", payload.error || "Не удалось экспортировать CSV.");
+      appendMessage("assistant", payload.error || "Не удалось экспортировать JSON.");
       return;
     }
     const blob = await response.blob();
-    downloadBlob(blob, `${type}.csv`);
+    downloadBlob(blob, `${type}.json`);
   } catch (err) {
-    appendMessage("assistant", "Ошибка экспорта CSV.");
+    appendMessage("assistant", "Ошибка экспорта JSON.");
   }
 }
 
-async function importCsv(file, type) {
+async function importJson(file, type) {
   if (!file) return;
   try {
     const text = await file.text();
+    try {
+      JSON.parse(text);
+    } catch (err) {
+      appendMessage("assistant", "Некорректный JSON.");
+      return;
+    }
     const response = await fetch("/api/import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, csv: text }),
+      body: JSON.stringify({ type, json: text }),
     });
     const payload = await response.json();
     if (!response.ok) {
-      appendMessage("assistant", payload.error || "Ошибка импорта CSV.");
+      appendMessage("assistant", payload.error || "Ошибка импорта JSON.");
       return;
     }
     appendMessage("assistant", payload.message || "Импорт завершен.");
     await loadStudents();
     await loadAbsences();
   } catch (err) {
-    appendMessage("assistant", "Ошибка импорта CSV.");
+    appendMessage("assistant", "Ошибка импорта JSON.");
   }
 }
 
@@ -743,17 +749,17 @@ function bindShortcuts() {
   }
 
   if (ui.btnExportStudents) {
-    ui.btnExportStudents.addEventListener("click", () => exportCsv("students"));
+    ui.btnExportStudents.addEventListener("click", () => exportJson("students"));
   }
 
   if (ui.btnExportAbsences) {
-    ui.btnExportAbsences.addEventListener("click", () => exportCsv("absences"));
+    ui.btnExportAbsences.addEventListener("click", () => exportJson("absences"));
   }
 
   if (ui.fileImportStudents) {
     ui.fileImportStudents.addEventListener("change", (event) => {
       const file = event.target.files[0];
-      if (file) importCsv(file, "students");
+      if (file) importJson(file, "students");
       event.target.value = "";
     });
   }
@@ -761,7 +767,7 @@ function bindShortcuts() {
   if (ui.fileImportAbsences) {
     ui.fileImportAbsences.addEventListener("change", (event) => {
       const file = event.target.files[0];
-      if (file) importCsv(file, "absences");
+      if (file) importJson(file, "absences");
       event.target.value = "";
     });
   }

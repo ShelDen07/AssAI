@@ -263,39 +263,45 @@ function downloadBlob(blob, filename) {
   link.click();
 }
 
-async function exportCsv() {
+async function exportJson() {
   try {
     const response = await fetch("/api/export?type=students");
     if (!response.ok) {
-      showToast("Не удалось экспортировать CSV.");
+      showToast("Не удалось экспортировать JSON.");
       return;
     }
     const blob = await response.blob();
-    downloadBlob(blob, "students.csv");
+    downloadBlob(blob, "students.json");
   } catch (err) {
-    showToast("Ошибка экспорта CSV.");
+    showToast("Ошибка экспорта JSON.");
   }
 }
 
-async function importCsv(file) {
+async function importJson(file) {
   if (!file) return;
   try {
     const text = await file.text();
+    try {
+      JSON.parse(text);
+    } catch (err) {
+      showToast("Некорректный JSON.");
+      return;
+    }
     const response = await fetch("/api/import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "students", csv: text }),
+      body: JSON.stringify({ type: "students", json: text }),
     });
     const payload = await response.json();
     if (!response.ok) {
-      showToast(payload.error || "Ошибка импорта CSV.");
+      showToast(payload.error || "Ошибка импорта JSON.");
       return;
     }
     showToast(payload.message || "Импорт завершен.");
     await refreshGroups();
     await loadStudents();
   } catch (err) {
-    showToast("Ошибка импорта CSV.");
+    showToast("Ошибка импорта JSON.");
   }
 }
 
@@ -329,13 +335,13 @@ function bindEvents() {
   }
 
   if (ui.btnExport) {
-    ui.btnExport.addEventListener("click", () => exportCsv());
+    ui.btnExport.addEventListener("click", () => exportJson());
   }
 
   if (ui.fileImport) {
     ui.fileImport.addEventListener("change", (event) => {
       const file = event.target.files[0];
-      if (file) importCsv(file);
+      if (file) importJson(file);
       event.target.value = "";
     });
   }

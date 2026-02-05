@@ -1,6 +1,4 @@
-﻿import csv
-import io
-import json
+﻿﻿import json
 import os
 import sqlite3
 import threading
@@ -200,38 +198,56 @@ def parse_bool(value):
   return raw in {"1", "true", "yes", "y", "да", "истина", "t"}
 
 
-def export_students_csv():
+def export_students_json():
   rows = list_students()
-  output = io.StringIO()
-  writer = csv.writer(output)
-  writer.writerow(["name", "group", "contact"])
-  for row in rows:
-    writer.writerow([row.get("name"), row.get("group_name"), row.get("contact", "")])
-  return output.getvalue()
+  payload = {
+    "students": [
+      {
+        "id": row.get("id"),
+        "name": row.get("name"),
+        "group": row.get("group_name"),
+        "contact": row.get("contact", ""),
+        "created_at": row.get("created_at"),
+      }
+      for row in rows
+    ]
+  }
+  return json.dumps(payload, ensure_ascii=False)
 
 
-def export_absences_csv():
+def export_absences_json():
   rows = list_absences()
-  output = io.StringIO()
-  writer = csv.writer(output)
-  writer.writerow(["student_name", "group", "date", "lessons", "type", "reason", "doc"])
-  for row in rows:
-    writer.writerow([
-      row.get("name"),
-      row.get("group_name"),
-      row.get("date"),
-      row.get("lessons"),
-      row.get("type"),
-      row.get("reason", ""),
-      1 if row.get("doc") else 0,
-    ])
-  return output.getvalue()
+  payload = {
+    "absences": [
+      {
+        "id": row.get("id"),
+        "student_id": row.get("student_id"),
+        "student_name": row.get("name"),
+        "group": row.get("group_name"),
+        "date": row.get("date"),
+        "lessons": row.get("lessons"),
+        "type": row.get("type"),
+        "reason": row.get("reason", ""),
+        "doc": 1 if row.get("doc") else 0,
+        "created_at": row.get("created_at"),
+      }
+      for row in rows
+    ]
+  }
+  return json.dumps(payload, ensure_ascii=False)
 
 
-def import_students_csv(text):
-  reader = csv.DictReader(io.StringIO(text or ""))
+def import_students_json(data):
+  if isinstance(data, dict):
+    items = data.get("students") or data.get("items") or data.get("data") or []
+  elif isinstance(data, list):
+    items = data
+  else:
+    items = []
   count = 0
-  for row in reader:
+  for row in items:
+    if not isinstance(row, dict):
+      continue
     name = (row.get("name") or row.get("student") or row.get("full_name") or "").strip()
     group = (row.get("group") or row.get("group_name") or "").strip()
     contact = (row.get("contact") or row.get("email") or row.get("phone") or "").strip()
@@ -242,11 +258,18 @@ def import_students_csv(text):
   return count
 
 
-def import_absences_csv(text):
-  reader = csv.DictReader(io.StringIO(text or ""))
+def import_absences_json(data):
+  if isinstance(data, dict):
+    items = data.get("absences") or data.get("items") or data.get("data") or []
+  elif isinstance(data, list):
+    items = data
+  else:
+    items = []
   count = 0
-  for row in reader:
-    student_id = to_int_optional(row.get("student_id"))
+  for row in items:
+    if not isinstance(row, dict):
+      continue
+    student_id = to_int_optional(row.get("student_id") or row.get("studentId"))
     name = (row.get("student_name") or row.get("name") or "").strip()
     group = (row.get("group") or row.get("group_name") or "").strip()
     if not student_id:
@@ -266,18 +289,18 @@ def import_absences_csv(text):
       continue
 
     date_value = row.get("date") or row.get("absence_date")
-    lessons = to_int(row.get("lessons"), 1)
+    lessons = to_int(row.get("lessons") or row.get("lesson_count"), 1)
     abs_type = (row.get("type") or "неуважительная").strip().lower()
     if abs_type not in {"неуважительная", "уважительная", "медицинская"}:
       abs_type = "неуважительная"
     reason = row.get("reason") or ""
-    doc = parse_bool(row.get("doc"))
+    doc = parse_bool(row.get("doc") or row.get("has_doc"))
 
     if record_absence(student_id, date_value, lessons, abs_type, reason, doc):
       count += 1
   return count
 
-def create_student(name, group, contact=""):
+(name, group, contact=""):
   with DB_LOCK:
     conn = db_connect()
     existing = conn.execute(
@@ -892,18 +915,18 @@ class AssistantHandler(SimpleHTTPRequestHandler):
   def _handle_export(self, params):
     export_type = (params.get("type") or "").strip().lower()
     if export_type == "students":
-      csv_text = export_students_csv()
-      filename = "students.csv"
+      json_text = export_students_json()
+      filename = "students.json"
     elif export_type == "absences":
-      csv_text = export_absences_csv()
-      filename = "absences.csv"
+      json_text = export_absences_json()
+      filename = "absences.json"
     else:
       self._send_json({"error": "Неизвестный тип экспорта"}, status=400)
       return
 
-    body = csv_text.encode("utf-8")
+    body = json_text.encode("utf-8")
     self.send_response(200)
-    self.send_header("Content-Type", "text/csv; charset=utf-8")
+    self.send_header("Content-Type", "application/json; charset=utf-8")
     self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
     self.send_header("Content-Length", str(len(body)))
     self.end_headers()
@@ -912,14 +935,28 @@ class AssistantHandler(SimpleHTTPRequestHandler):
   def _handle_import(self):
     data = self._read_json() or {}
     import_type = (data.get("type") or "").strip().lower()
-    csv_text = data.get("csv") or ""
-    if not csv_text:
-      self._send_json({"error": "Пустой CSV"}, status=400)
+    raw_json = data.get("json")
+    payload = data.get("data")
+
+    if isinstance(raw_json, str) and raw_json.strip():
+      try:
+        payload = json.loads(raw_json)
+      except json.JSONDecodeError:
+        self._send_json({"error": "Некорректный JSON"}, status=400)
+        return
+
+    if payload is None:
+      if "students" in data or "absences" in data:
+        payload = data
+
+    if payload is None:
+      self._send_json({"error": "Пустой JSON"}, status=400)
       return
+
     if import_type == "students":
-      count = import_students_csv(csv_text)
+      count = import_students_json(payload)
     elif import_type == "absences":
-      count = import_absences_csv(csv_text)
+      count = import_absences_json(payload)
     else:
       self._send_json({"error": "Неизвестный тип импорта"}, status=400)
       return
