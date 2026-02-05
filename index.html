@@ -53,6 +53,8 @@
             <span class="theme-track"></span>
             <span class="theme-label" id="theme-label">Светлая</span>
           </button>
+          <button class="ghost focus-toggle" id="btn-focus" type="button" aria-pressed="false">Фокус</button>
+          <a class="ghost" href="students.html">Студенты</a>
           <div class="auth">
             <div class="auth-google" id="google-button"></div>
             <div class="auth-user" id="auth-user" hidden>
@@ -107,7 +109,8 @@
             <option value="detailed">Подробно</option>
           </select>
         </label>
-        <button class="ghost" id="btn-reset">Новый диалог</button>
+        <button class="ghost" id="btn-reset" type="button">Новый диалог</button>
+        <button class="ghost" id="btn-copy" type="button">Скопировать диалог</button>
       </div>
 
       <div class="quick-cards">
@@ -203,5 +206,6 @@
       <div>Данные сохраняются локально. Запросы отправляются в Gemini.</div>
     </footer>
   </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

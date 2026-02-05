@@ -1,0 +1,98 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Управление студентами</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    (function () {
+      const stored = localStorage.getItem("assistant_theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const theme = stored || (prefersDark ? "dark" : "light");
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
+  <script defer src="students.js"></script>
+</head>
+<body>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="mesh"></div>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">IA</div>
+        <div>
+          <div class="brand-title">Управление студентами</div>
+          <div class="brand-subtitle">Справочник и группы</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-actions">
+          <a class="ghost" href="index.html">Назад к ассистенту</a>
+          <button class="theme-toggle" id="btn-theme" type="button" aria-pressed="false">
+            <span class="theme-track"></span>
+            <span class="theme-label" id="theme-label">Светлая</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="student-shell">
+      <section class="card student-hero">
+        <div class="student-hero-top">
+          <div>
+            <div class="eyebrow">Справочник</div>
+            <h1>Студенты и группы</h1>
+            <p>Добавляйте, редактируйте и импортируйте список студентов. Данные сохраняются в SQLite.</p>
+          </div>
+          <div class="student-metrics">
+            <div class="metric">
+              <strong id="metric-total">0</strong>
+              <span>Всего студентов</span>
+            </div>
+            <div class="metric">
+              <strong id="metric-groups">0</strong>
+              <span>Групп</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="student-toolbar">
+          <input id="student-query" type="text" placeholder="Поиск по ФИО" />
+          <select id="student-group">
+            <option value="all">Все группы</option>
+          </select>
+          <button class="ghost" id="btn-refresh" type="button">Обновить</button>
+          <button class="ghost" id="btn-export" type="button">Экспорт CSV</button>
+          <label class="ghost file-label">
+            Импорт CSV
+            <input type="file" id="file-import" accept=".csv" />
+          </label>
+        </div>
+        <div id="student-list" class="student-list"></div>
+        <div class="mini">Совет: для редактирования нажмите «Изменить» в строке студента.</div>
+      </section>
+
+      <section class="card">
+        <h3 id="form-title">Добавить студента</h3>
+        <form id="student-form" class="student-form">
+          <input id="form-name" type="text" placeholder="ФИО" required />
+          <input id="form-group" type="text" placeholder="Группа" required />
+          <input id="form-contact" type="text" placeholder="Контакт (email / телефон)" />
+          <div class="student-form-actions">
+            <button class="send" id="btn-save" type="submit">Сохранить</button>
+            <button class="ghost" id="btn-cancel" type="button">Сброс</button>
+          </div>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

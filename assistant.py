@@ -1,4 +1,6 @@
-﻿import json
+﻿import csv
+import io
+import json
 import os
 import sqlite3
 import threading
@@ -6,6 +8,7 @@ from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib import request, error
+from urllib.parse import parse_qs, urlparse
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "assistant.db"
@@ -188,6 +191,91 @@ def to_int_optional(value):
   except (TypeError, ValueError):
     return None
 
+def parse_bool(value):
+  if value is None:
+    return False
+  if isinstance(value, bool):
+    return value
+  raw = str(value).strip().lower()
+  return raw in {"1", "true", "yes", "y", "да", "истина", "t"}
+
+
+def export_students_csv():
+  rows = list_students()
+  output = io.StringIO()
+  writer = csv.writer(output)
+  writer.writerow(["name", "group", "contact"])
+  for row in rows:
+    writer.writerow([row.get("name"), row.get("group_name"), row.get("contact", "")])
+  return output.getvalue()
+
+
+def export_absences_csv():
+  rows = list_absences()
+  output = io.StringIO()
+  writer = csv.writer(output)
+  writer.writerow(["student_name", "group", "date", "lessons", "type", "reason", "doc"])
+  for row in rows:
+    writer.writerow([
+      row.get("name"),
+      row.get("group_name"),
+      row.get("date"),
+      row.get("lessons"),
+      row.get("type"),
+      row.get("reason", ""),
+      1 if row.get("doc") else 0,
+    ])
+  return output.getvalue()
+
+
+def import_students_csv(text):
+  reader = csv.DictReader(io.StringIO(text or ""))
+  count = 0
+  for row in reader:
+    name = (row.get("name") or row.get("student") or row.get("full_name") or "").strip()
+    group = (row.get("group") or row.get("group_name") or "").strip()
+    contact = (row.get("contact") or row.get("email") or row.get("phone") or "").strip()
+    if not name or not group:
+      continue
+    create_student(name, group, contact)
+    count += 1
+  return count
+
+
+def import_absences_csv(text):
+  reader = csv.DictReader(io.StringIO(text or ""))
+  count = 0
+  for row in reader:
+    student_id = to_int_optional(row.get("student_id"))
+    name = (row.get("student_name") or row.get("name") or "").strip()
+    group = (row.get("group") or row.get("group_name") or "").strip()
+    if not student_id:
+      student = None
+      if name and group:
+        student = get_student_by_name_group(name, group)
+        if not student:
+          student = create_student(name, group, row.get("contact", ""))
+      elif name:
+        matches = find_students(name)
+        if len(matches) == 1:
+          student = matches[0]
+      if student:
+        student_id = student.get("id")
+
+    if not student_id:
+      continue
+
+    date_value = row.get("date") or row.get("absence_date")
+    lessons = to_int(row.get("lessons"), 1)
+    abs_type = (row.get("type") or "неуважительная").strip().lower()
+    if abs_type not in {"неуважительная", "уважительная", "медицинская"}:
+      abs_type = "неуважительная"
+    reason = row.get("reason") or ""
+    doc = parse_bool(row.get("doc"))
+
+    if record_absence(student_id, date_value, lessons, abs_type, reason, doc):
+      count += 1
+  return count
 
 def create_student(name, group, contact=""):
   with DB_LOCK:
@@ -212,6 +300,41 @@ def create_student(name, group, contact=""):
     row = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
     conn.close()
     return dict(row)
+
+def update_student(student_id, name, group, contact=""):
+  with DB_LOCK:
+    conn = db_connect()
+    existing = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
+    if not existing:
+      conn.close()
+      return None
+
+    next_name = name or existing["name"]
+    next_group = group or existing["group_name"]
+    next_contact = contact if contact is not None else existing["contact"]
+
+    conn.execute(
+      "UPDATE students SET name = ?, group_name = ?, contact = ? WHERE id = ?",
+      (next_name, next_group, next_contact, student_id),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def delete_student(student_id):
+  with DB_LOCK:
+    conn = db_connect()
+    count = conn.execute("SELECT COUNT(*) AS total FROM absences WHERE student_id = ?", (student_id,)).fetchone()["total"]
+    if count > 0:
+      conn.close()
+      return False, f"Нельзя удалить студента: есть пропуски ({count})."
+    conn.execute("DELETE FROM students WHERE id = ?", (student_id,))
+    conn.commit()
+    deleted = conn.total_changes > 0
+    conn.close()
+    return deleted, None
 
 
 def find_students(query, group=None):
@@ -647,8 +770,14 @@ class AssistantHandler(SimpleHTTPRequestHandler):
   def __init__(self, *args, **kwargs):
     super().__init__(*args, directory=str(BASE_DIR), **kwargs)
 
+  def _parse_path(self):
+    parsed = urlparse(self.path)
+    params = {key: values[0] for key, values in parse_qs(parsed.query).items()}
+    return parsed.path, params
+
   def do_GET(self):
-    if self.path.startswith("/api/health"):
+    path, params = self._parse_path()
+    if path.startswith("/api/health"):
       payload = {
         "ok": True,
         "api_key": bool(os.getenv("GEMINI_API_KEY")),
@@ -657,16 +786,145 @@ class AssistantHandler(SimpleHTTPRequestHandler):
       }
       self._send_json(payload)
       return
+    if path.startswith("/api/students"):
+      self._handle_students(params)
+      return
+    if path.startswith("/api/absences"):
+      self._handle_absences(params)
+      return
+    if path.startswith("/api/export"):
+      self._handle_export(params)
+      return
     super().do_GET()
 
   def do_POST(self):
-    if self.path.startswith("/api/chat"):
+    path, params = self._parse_path()
+    if path.startswith("/api/students"):
+      self._handle_students_post()
+      return
+    if path.startswith("/api/chat"):
       self._handle_chat()
       return
-    if self.path.startswith("/api/reset"):
+    if path.startswith("/api/reset"):
       self._handle_reset()
       return
+    if path.startswith("/api/import"):
+      self._handle_import()
+      return
     self.send_error(404, "Not Found")
+
+  def _handle_students(self, params):
+    query = (params.get("query") or "").strip()
+    group = (params.get("group") or "").strip()
+    if group == "all":
+      group = ""
+    rows = list_students(query=query or None, group=group or None)
+    students = []
+    for row in rows:
+      item = dict(row)
+      item["group"] = item.get("group_name")
+      students.append(item)
+    self._send_json({"students": students})
+
+  def _handle_students_post(self):
+    data = self._read_json() or {}
+    action = (data.get("action") or "create").strip().lower()
+
+    if action in {"create", "add", "new"}:
+      name = (data.get("name") or "").strip()
+      group = (data.get("group") or "").strip()
+      contact = (data.get("contact") or "").strip()
+      if not name or not group:
+        self._send_json({"error": "Нужно указать имя и группу."}, status=400)
+        return
+      student = create_student(name, group, contact)
+      self._send_json({"ok": True, "student": student})
+      return
+
+    if action in {"update", "edit", "save"}:
+      student_id = to_int_optional(data.get("id"))
+      if not student_id:
+        self._send_json({"error": "Не указан id студента."}, status=400)
+        return
+      name = (data.get("name") or "").strip()
+      group = (data.get("group") or "").strip()
+      contact = (data.get("contact") if data.get("contact") is not None else "").strip()
+      if not name or not group:
+        self._send_json({"error": "Нужно указать имя и группу."}, status=400)
+        return
+      student = update_student(student_id, name, group, contact)
+      if not student:
+        self._send_json({"error": "Студент не найден."}, status=404)
+        return
+      self._send_json({"ok": True, "student": student})
+      return
+
+    if action in {"delete", "remove"}:
+      student_id = to_int_optional(data.get("id"))
+      if not student_id:
+        self._send_json({"error": "Не указан id студента."}, status=400)
+        return
+      ok, err = delete_student(student_id)
+      if not ok:
+        self._send_json({"error": err or "Не удалось удалить."}, status=400)
+        return
+      self._send_json({"ok": True})
+      return
+
+    self._send_json({"error": "Неизвестное действие."}, status=400)
+
+  def _handle_absences(self, params):
+    group = (params.get("group") or "").strip()
+    if group == "all":
+      group = ""
+    abs_type = (params.get("type") or "").strip()
+    if abs_type == "all":
+      abs_type = ""
+    rows = list_absences(
+      student_name=params.get("student_name"),
+      group=group or None,
+      date_from=params.get("date_from"),
+      date_to=params.get("date_to"),
+      abs_type=abs_type or None,
+    )
+    self._send_json({"absences": rows})
+
+  def _handle_export(self, params):
+    export_type = (params.get("type") or "").strip().lower()
+    if export_type == "students":
+      csv_text = export_students_csv()
+      filename = "students.csv"
+    elif export_type == "absences":
+      csv_text = export_absences_csv()
+      filename = "absences.csv"
+    else:
+      self._send_json({"error": "Неизвестный тип экспорта"}, status=400)
+      return
+
+    body = csv_text.encode("utf-8")
+    self.send_response(200)
+    self.send_header("Content-Type", "text/csv; charset=utf-8")
+    self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+    self.send_header("Content-Length", str(len(body)))
+    self.end_headers()
+    self.wfile.write(body)
+
+  def _handle_import(self):
+    data = self._read_json() or {}
+    import_type = (data.get("type") or "").strip().lower()
+    csv_text = data.get("csv") or ""
+    if not csv_text:
+      self._send_json({"error": "Пустой CSV"}, status=400)
+      return
+    if import_type == "students":
+      count = import_students_csv(csv_text)
+    elif import_type == "absences":
+      count = import_absences_csv(csv_text)
+    else:
+      self._send_json({"error": "Неизвестный тип импорта"}, status=400)
+      return
+
+    self._send_json({"ok": True, "message": f"Импортировано: {count}"})
 
   def _handle_chat(self):
     data = self._read_json()

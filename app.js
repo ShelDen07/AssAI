@@ -4,6 +4,9 @@
   btnSend: document.getElementById("btn-send"),
   btnMic: document.getElementById("btn-mic"),
   btnReset: document.getElementById("btn-reset"),
+  btnCopy: document.getElementById("btn-copy"),
+  btnFocus: document.getElementById("btn-focus"),
+  toast: document.getElementById("toast"),
   autoSend: document.getElementById("auto-send"),
   responseMode: document.getElementById("response-mode"),
   scenarioSelect: document.getElementById("scenario-select"),
@@ -42,6 +45,8 @@
 
 const THEME_KEY = "assistant_theme";
 const GOOGLE_USER_KEY = "assistant_google_user";
+const DRAFT_KEY = "assistant_draft";
+const FOCUS_KEY = "assistant_focus";
 const sessionId = initSession();
 let typingMessage = null;
 let recognitionActive = false;
@@ -51,12 +56,14 @@ const state = {
   absences: [],
 };
 let micAudioContext = null;
+let draftTimer = null;
+let toastTimer = null;
 
 const scenarioTemplates = {
-  absences_student: "Покажи пропуски студента Иванов Иван",
-  record_absence: "Зафиксируй пропуск: Иванов Иван, 03.02.2026, 2 занятия, причина — болезнь",
-  add_student: "Добавь студента: Иванов Иван, группа ИС-21, контакт — ivanov@mail.ru",
-  report_group: "Сделай отчет по группе ИС-21 за январь 2026",
+  absences_student: "Покажи пропуски студента ФИО",
+  record_absence: "Зафиксируй пропуск: ФИО, 03.02.2026, 2 занятия, причина — болезнь",
+  add_student: "Добавь студента: ФИО, группа (ГРУППА), контакт — name@gmail.com",
+  report_group: "Сделай отчет по группе (ГРУППА) за (ЧИСЛО)",
 };
 
 function initSession() {
@@ -221,6 +228,90 @@ function setStatus(state, text) {
   ui.status.classList.remove("online", "error");
   if (state) ui.status.classList.add(state);
   ui.statusText.textContent = "Сервер запущен";
+}
+
+function showToast(message) {
+  if (!ui.toast) return;
+  ui.toast.textContent = message;
+  ui.toast.classList.add("show");
+  if (toastTimer) window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    ui.toast.classList.remove("show");
+  }, 2200);
+}
+
+function scheduleDraftSave() {
+  if (!ui.userInput) return;
+  if (draftTimer) window.clearTimeout(draftTimer);
+  draftTimer = window.setTimeout(() => {
+    localStorage.setItem(DRAFT_KEY, ui.userInput.value || "");
+  }, 250);
+}
+
+function restoreDraft() {
+  if (!ui.userInput) return;
+  const draft = localStorage.getItem(DRAFT_KEY);
+  if (draft) ui.userInput.value = draft;
+}
+
+function clearDraft() {
+  localStorage.removeItem(DRAFT_KEY);
+}
+
+function setFocusMode(enabled, persist = true) {
+  document.body.dataset.focus = enabled ? "on" : "off";
+  if (ui.btnFocus) {
+    ui.btnFocus.setAttribute("aria-pressed", enabled ? "true" : "false");
+    ui.btnFocus.textContent = enabled ? "Фокус: Вкл" : "Фокус";
+    ui.btnFocus.classList.toggle("active", enabled);
+  }
+  if (persist) localStorage.setItem(FOCUS_KEY, enabled ? "on" : "off");
+}
+
+function toggleFocus() {
+  const enabled = document.body.dataset.focus === "on";
+  setFocusMode(!enabled);
+  showToast(enabled ? "Фокус выключен." : "Фокус включен.");
+}
+
+function initFocus() {
+  const stored = localStorage.getItem(FOCUS_KEY);
+  setFocusMode(stored === "on", false);
+}
+
+function buildConversationText() {
+  if (!ui.conversation) return "";
+  const messages = Array.from(ui.conversation.querySelectorAll(".message"));
+  return messages
+    .map((node) => {
+      const role = node.classList.contains("user") ? "Вы" : "Ассистент";
+      const text = node.querySelector(".message-text")?.textContent?.trim() || "";
+      return `${role}: ${text}`;
+    })
+    .join("\n");
+}
+
+async function copyConversation() {
+  const text = buildConversationText();
+  if (!text) {
+    showToast("Диалог пуст.");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast("Диалог скопирован.");
+  } catch (err) {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "absolute";
+    area.style.left = "-9999px";
+    document.body.append(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    showToast(ok ? "Диалог скопирован." : "Не удалось скопировать.");
+  }
 }
 
 function playMicChime() {
@@ -538,6 +629,7 @@ async function sendMessage(text) {
 
   appendMessage("user", cleaned);
   ui.userInput.value = "";
+  clearDraft();
 
   removeTyping();
   typingMessage = appendMessage("assistant", "Думаю…", { typing: true });
@@ -673,6 +765,15 @@ function bindShortcuts() {
       event.target.value = "";
     });
   }
+  if (ui.btnCopy) {
+    ui.btnCopy.addEventListener("click", () => copyConversation());
+  }
+  if (ui.btnFocus) {
+    ui.btnFocus.addEventListener("click", () => toggleFocus());
+  }
+  if (ui.userInput) {
+    ui.userInput.addEventListener("input", scheduleDraftSave);
+  }
 }
 
 function setupSpeechRecognition() {
@@ -749,7 +850,9 @@ async function loadHealth() {
 }
 
 initTheme();
+initFocus();
 initAuth();
 bindShortcuts();
+restoreDraft();
 setupSpeechRecognition();
 loadHealth();
