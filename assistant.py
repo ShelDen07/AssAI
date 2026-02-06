@@ -1,4 +1,5 @@
-﻿﻿import json
+# -*- coding: utf-8 -*-
+import json
 import os
 import sqlite3
 import threading
