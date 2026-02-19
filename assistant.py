@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "assistant.db"
+USERS_PATH = BASE_DIR / "users.json"
 API_URL_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 DEFAULT_MODEL = "gemini-2.5-flash"
 
@@ -26,6 +27,9 @@ SYSTEM_PROMPT = """
 Правила:
 - Не выдумывайте данные. Любые факты о студентах и пропусках берите через инструменты.
 - Если не хватает данных (ФИО, группа, дата, количество занятий, тип), задайте уточняющий вопрос.
+- При добавлении студента можно указать баллы за пропуск (absence_points), по умолчанию 1.
+- Для обновления данных студента (включая баллы за пропуск) используйте инструмент update_student.
+- Если известен ID студента, используйте его для точного выбора.
 - Для записи пропусков используйте инструмент record_absence.
 - Для поиска студентов используйте find_students.
 - Для отчетов используйте generate_report.
@@ -35,7 +39,7 @@ SYSTEM_PROMPT = """
 FUNCTION_DECLARATIONS = [
   {
     "name": "add_student",
-    "description": "Добавить студента в базу",
+    "description": "Добавить студента в базу (опционально: absence_points — баллы за пропуск)",
     "parameters": {
       "type": "object",
       "properties": {
@@ -45,6 +49,20 @@ FUNCTION_DECLARATIONS = [
         "absence_points": {"type": "integer"}
       },
       "required": ["name", "group"]
+    }
+  },
+  {
+    "name": "update_student",
+    "description": "Обновить данные студента (можно менять баллы за пропуск)",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "integer"},
+        "name": {"type": "string"},
+        "group": {"type": "string"},
+        "contact": {"type": "string"},
+        "absence_points": {"type": "integer"}
+      }
     }
   },
   {
@@ -195,6 +213,17 @@ def to_int_optional(value):
   except (TypeError, ValueError):
     return None
 
+def parse_student_id(value):
+  if value is None:
+    return None
+  raw = str(value).strip()
+  if not raw.isdigit():
+    return None
+  try:
+    return int(raw)
+  except (TypeError, ValueError):
+    return None
+
 def normalize_points(value, default=1):
   if value is None or value == "":
     return default
@@ -211,6 +240,53 @@ def parse_bool(value):
     return value
   raw = str(value).strip().lower()
   return raw in {"1", "true", "yes", "y", "да", "истина", "t"}
+
+
+def load_users():
+  if not USERS_PATH.exists():
+    return []
+  try:
+    data = json.loads(USERS_PATH.read_text(encoding="utf-8"))
+  except Exception:
+    return []
+  users = data.get("users") if isinstance(data, dict) else None
+  if not isinstance(users, list):
+    return []
+  normalized = []
+  for row in users:
+    if not isinstance(row, dict):
+      continue
+    email = str(row.get("email") or "").strip().lower()
+    password = str(row.get("password") or "").strip()
+    role = str(row.get("role") or "").strip().lower()
+    if not email or not password or role not in {"teacher", "student"}:
+      continue
+    normalized.append({
+      "email": email,
+      "password": password,
+      "role": role,
+      "name": str(row.get("name") or "").strip(),
+    })
+  return normalized
+
+
+def find_user(email, password, role):
+  email_norm = str(email or "").strip().lower()
+  password_norm = str(password or "").strip()
+  role_norm = str(role or "").strip().lower()
+  if role_norm == "demo":
+    return {
+      "email": "demo@local",
+      "password": "",
+      "role": "demo",
+      "name": "Демо",
+    }
+  if not email_norm or not password_norm or role_norm not in {"teacher", "student"}:
+    return None
+  for user in load_users():
+    if user["email"] == email_norm and user["password"] == password_norm and user["role"] == role_norm:
+      return user
+  return None
 
 
 def export_students_json():
@@ -393,8 +469,13 @@ def delete_student(student_id):
 def find_students(query, group=None):
   with DB_LOCK:
     conn = db_connect()
-    sql = "SELECT * FROM students WHERE lower(name) LIKE ?"
-    params = [f"%{query.lower()}%"]
+    student_id = parse_student_id(query)
+    if student_id is not None:
+      sql = "SELECT * FROM students WHERE (id = ? OR lower(name) LIKE ?)"
+      params = [student_id, f"%{query.lower()}%"]
+    else:
+      sql = "SELECT * FROM students WHERE lower(name) LIKE ?"
+      params = [f"%{query.lower()}%"]
     if group:
       sql += " AND group_name = ?"
       params.append(group)
@@ -410,8 +491,13 @@ def list_students(query=None, group=None):
     sql = "SELECT * FROM students WHERE 1=1"
     params = []
     if query:
-      sql += " AND lower(name) LIKE ?"
-      params.append(f"%{query.lower()}%")
+      student_id = parse_student_id(query)
+      if student_id is not None:
+        sql += " AND (id = ? OR lower(name) LIKE ?)"
+        params.extend([student_id, f"%{query.lower()}%"])
+      else:
+        sql += " AND lower(name) LIKE ?"
+        params.append(f"%{query.lower()}%")
     if group:
       sql += " AND group_name = ?"
       params.append(group)
@@ -477,8 +563,13 @@ def list_absences(student_name=None, group=None, date_from=None, date_to=None, a
     """
     params = []
     if student_name:
-      sql += " AND lower(s.name) LIKE ?"
-      params.append(f"%{student_name.lower()}%")
+      student_id = parse_student_id(student_name)
+      if student_id is not None:
+        sql += " AND s.id = ?"
+        params.append(student_id)
+      else:
+        sql += " AND lower(s.name) LIKE ?"
+        params.append(f"%{student_name.lower()}%")
     if group:
       sql += " AND s.group_name = ?"
       params.append(group)
@@ -613,6 +704,38 @@ def handle_tool_call(name, args):
     )
     action = f"Добавлен студент: {student['name']} ({student['group_name']})"
     return {"ok": True, "student": student}, action
+
+  if name == "update_student":
+    student_id = to_int_optional(args.get("id"))
+    name = (args.get("name") or "").strip()
+    group = (args.get("group") or "").strip()
+    contact = args.get("contact") if "contact" in args else None
+    absence_points = args.get("absence_points")
+
+    if not student_id:
+      if name and group:
+        student = get_student_by_name_group(name, group)
+        if student:
+          student_id = student.get("id")
+      elif name:
+        matches = find_students(name)
+        if len(matches) == 1:
+          student_id = matches[0]["id"]
+        elif len(matches) > 1:
+          return {
+            "ok": False,
+            "error": "Найдено несколько студентов. Уточните группу или укажите ID.",
+            "candidates": matches,
+          }, None
+
+    if not student_id:
+      return {"ok": False, "error": "Студент не найден. Укажите ID или ФИО и группу."}, None
+
+    updated = update_student(student_id, name, group, contact, absence_points)
+    if not updated:
+      return {"ok": False, "error": "Студент не найден."}, None
+    action = f"Обновлен студент: {updated['name']} ({updated['group_name']})"
+    return {"ok": True, "student": updated}, action
 
   if name == "find_students":
     students = find_students(args.get("query", ""), args.get("group"))
@@ -865,6 +988,9 @@ class AssistantHandler(SimpleHTTPRequestHandler):
     if path.startswith("/api/students"):
       self._handle_students_post()
       return
+    if path.startswith("/api/login"):
+      self._handle_login()
+      return
     if path.startswith("/api/chat"):
       self._handle_chat()
       return
@@ -1005,6 +1131,25 @@ class AssistantHandler(SimpleHTTPRequestHandler):
       return
 
     self._send_json({"ok": True, "message": f"Импортировано: {count}"})
+
+  def _handle_login(self):
+    data = self._read_json() or {}
+    email = data.get("email")
+    password = data.get("password")
+    role = data.get("role")
+    user = find_user(email, password, role)
+    if not user:
+      self._send_json({"error": "Неверная почта, пароль или роль."}, status=401)
+      return
+    name = user.get("name") or ("Преподаватель" if user["role"] == "teacher" else "Студент")
+    self._send_json({
+      "ok": True,
+      "user": {
+        "email": user["email"],
+        "role": user["role"],
+        "name": name,
+      }
+    })
 
   def _handle_chat(self):
     data = self._read_json()

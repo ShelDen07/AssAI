@@ -15,10 +15,47 @@
   </script>
   <script defer src="students.js"></script>
 </head>
-<body>
+<body data-auth="required">
   <div class="orb orb-1"></div>
   <div class="orb orb-2"></div>
   <div class="mesh"></div>
+
+  <div class="auth-gate">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-lock">Доступ по роли</div>
+        <h2>Вход в систему</h2>
+        <p>Выберите роль и войдите по почте и паролю. Демо доступно без данных.</p>
+      </div>
+      <div class="auth-role-tabs" id="login-role-tabs">
+        <button class="role-tab" type="button" data-role="teacher">Преподаватель</button>
+        <button class="role-tab" type="button" data-role="student">Студент</button>
+        <button class="role-tab" type="button" data-role="demo">Демо</button>
+      </div>
+      <div class="auth-fields">
+        <label class="auth-field sr-only">
+          <span>Роль</span>
+          <select id="login-role">
+            <option value="teacher" selected>Преподаватель</option>
+            <option value="student">Студент</option>
+            <option value="demo">Демо</option>
+          </select>
+        </label>
+        <label class="auth-field">
+          <span>Почта</span>
+          <input id="login-email" type="email" autocomplete="username" placeholder="name@example.com" />
+        </label>
+        <label class="auth-field">
+          <span>Пароль</span>
+          <input id="login-password" type="password" autocomplete="current-password" placeholder="Пароль" />
+        </label>
+      </div>
+      <div class="auth-actions">
+        <button class="send" id="btn-login" type="button">Войти</button>
+        <div class="auth-hint" id="login-hint"></div>
+      </div>
+    </div>
+  </div>
 
   <div class="app-shell">
     <header class="topbar">
@@ -36,6 +73,16 @@
             <span class="theme-track"></span>
             <span class="theme-label" id="theme-label">Светлая</span>
           </button>
+          <div class="auth">
+            <div class="auth-user" id="auth-user" hidden>
+              <img class="auth-avatar" id="auth-avatar" alt="" />
+              <div class="auth-meta">
+                <div class="auth-name" id="auth-name">—</div>
+                <div class="auth-email" id="auth-email">—</div>
+              </div>
+            </div>
+            <button class="ghost auth-signout" id="btn-signout" type="button" hidden>Выйти</button>
+          </div>
         </div>
       </div>
     </header>
@@ -63,7 +110,7 @@
 
       <section class="card">
         <div class="student-toolbar">
-          <input id="student-query" type="text" placeholder="Поиск по ФИО" />
+          <input id="student-query" type="text" placeholder="Поиск по ФИО или ID" />
           <select id="student-group">
             <option value="all">Все группы</option>
           </select>

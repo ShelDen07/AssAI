@@ -17,9 +17,21 @@
   toast: document.getElementById("toast"),
   themeToggle: document.getElementById("btn-theme"),
   themeLabel: document.getElementById("theme-label"),
+  loginRole: document.getElementById("login-role"),
+  loginEmail: document.getElementById("login-email"),
+  loginPassword: document.getElementById("login-password"),
+  btnLogin: document.getElementById("btn-login"),
+  loginHint: document.getElementById("login-hint"),
+  roleTabs: document.querySelectorAll(".role-tab"),
+  authUser: document.getElementById("auth-user"),
+  authAvatar: document.getElementById("auth-avatar"),
+  authName: document.getElementById("auth-name"),
+  authEmail: document.getElementById("auth-email"),
+  btnSignOut: document.getElementById("btn-signout"),
 };
 
 const THEME_KEY = "assistant_theme";
+const AUTH_USER_KEY = "assistant_auth_user";
 let editId = null;
 let searchTimer = null;
 let toastTimer = null;
@@ -42,6 +54,140 @@ function initTheme() {
       setTheme(next);
     });
   }
+}
+
+function setAuthUser(user, persist = true) {
+  document.body.dataset.auth = user ? "ready" : "required";
+  if (persist) {
+    if (user) {
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(AUTH_USER_KEY);
+    }
+  }
+
+  if (ui.authUser) ui.authUser.hidden = !user;
+  if (ui.btnSignOut) ui.btnSignOut.hidden = !user;
+
+  if (ui.authAvatar) {
+    ui.authAvatar.hidden = true;
+    ui.authAvatar.removeAttribute("src");
+    ui.authAvatar.alt = "";
+  }
+
+  const roleLabel =
+    user?.role === "teacher"
+      ? "Преподаватель"
+      : user?.role === "student"
+        ? "Студент"
+        : "Демо";
+  if (ui.authName) ui.authName.textContent = user?.name || roleLabel || "—";
+  if (ui.authEmail) ui.authEmail.textContent = user?.email || "";
+  if (ui.loginHint && user) ui.loginHint.textContent = "";
+}
+
+function showLoginHint(message) {
+  if (!ui.loginHint) return;
+  ui.loginHint.textContent = message;
+}
+
+function updateLoginRole() {
+  if (!ui.loginRole) return;
+  const role = ui.loginRole.value;
+  const isDemo = role === "demo";
+  if (ui.roleTabs && ui.roleTabs.length) {
+    ui.roleTabs.forEach((tab) => {
+      tab.classList.toggle("active", tab.dataset.role === role);
+    });
+  }
+  if (ui.loginEmail) {
+    ui.loginEmail.disabled = isDemo;
+    if (isDemo) ui.loginEmail.value = "";
+  }
+  if (ui.loginPassword) {
+    ui.loginPassword.disabled = isDemo;
+    if (isDemo) ui.loginPassword.value = "";
+  }
+  if (ui.loginHint && isDemo) {
+    ui.loginHint.textContent = "Демо-вход без почты и пароля.";
+  } else if (ui.loginHint) {
+    ui.loginHint.textContent = "";
+  }
+}
+
+async function loginWithCredentials() {
+  const role = ui.loginRole ? ui.loginRole.value : "teacher";
+  const email = ui.loginEmail ? ui.loginEmail.value.trim() : "";
+  const password = ui.loginPassword ? ui.loginPassword.value : "";
+
+  if (role !== "demo" && (!email || !password)) {
+    showLoginHint("Введите почту и пароль.");
+    return;
+  }
+
+  showLoginHint("Проверка данных...");
+
+  try {
+    const response = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, role }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      showLoginHint(payload.error || "Не удалось войти.");
+      return;
+    }
+    setAuthUser(payload.user || { email, role }, true);
+    if (ui.loginPassword) ui.loginPassword.value = "";
+  } catch (err) {
+    showLoginHint("Не удалось войти. Проверьте сервер.");
+  }
+}
+
+function initAuth() {
+  if (ui.roleTabs && ui.roleTabs.length) {
+    ui.roleTabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        if (ui.loginRole) ui.loginRole.value = tab.dataset.role || "teacher";
+        updateLoginRole();
+      });
+    });
+  }
+  if (ui.btnLogin) {
+    ui.btnLogin.addEventListener("click", () => loginWithCredentials());
+  }
+  if (ui.loginPassword) {
+    ui.loginPassword.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        loginWithCredentials();
+      }
+    });
+  }
+  if (ui.loginEmail) {
+    ui.loginEmail.addEventListener("input", () => showLoginHint(""));
+  }
+  if (ui.loginRole) {
+    ui.loginRole.addEventListener("change", () => updateLoginRole());
+  }
+
+  if (ui.btnSignOut) {
+    ui.btnSignOut.addEventListener("click", () => {
+      setAuthUser(null);
+    });
+  }
+
+  const stored = localStorage.getItem(AUTH_USER_KEY);
+  if (stored) {
+    try {
+      setAuthUser(JSON.parse(stored), false);
+    } catch (err) {
+      localStorage.removeItem(AUTH_USER_KEY);
+    }
+  }
+
+  updateLoginRole();
 }
 
 function showToast(message) {
@@ -121,7 +267,10 @@ function renderList(rows) {
     const pill = document.createElement("span");
     pill.className = "pill";
     pill.textContent = row.group_name || row.group || "—";
-    group.append(pill);
+    const idPill = document.createElement("span");
+    idPill.className = "pill id-pill";
+    idPill.textContent = `ID ${row.id ?? "—"}`;
+    group.append(pill, idPill);
 
     const meta = document.createElement("div");
     meta.className = "student-meta";
@@ -364,6 +513,7 @@ function bindEvents() {
 }
 
 initTheme();
+initAuth();
 bindEvents();
 refreshGroups();
 loadStudents();

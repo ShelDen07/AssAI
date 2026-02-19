@@ -13,23 +13,46 @@
       document.documentElement.dataset.theme = theme;
     })();
   </script>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script defer src="app.js"></script>
 </head>
-<body data-google-client-id="568002795902-9rujrugcspusikbb2c87gkfgdf6e3v72.apps.googleusercontent.com" data-auth="required">
+<body data-auth="required">
   <div class="orb orb-1"></div>
   <div class="orb orb-2"></div>
   <div class="mesh"></div>
 
   <div class="auth-gate">
     <div class="auth-card">
-      <div class="auth-lock">Доступ по Google</div>
-      <h2>Войдите в аккаунт</h2>
-      <p>После входа откроется рабочее пространство ассистента и ваши данные будут доступны на этом устройстве.</p>
+      <div class="auth-header">
+        <div class="auth-lock">Доступ по роли</div>
+        <h2>Вход в систему</h2>
+        <p>Выберите роль и войдите по почте и паролю. Демо доступно без данных.</p>
+      </div>
+      <div class="auth-role-tabs" id="login-role-tabs">
+        <button class="role-tab" type="button" data-role="teacher">Преподаватель</button>
+        <button class="role-tab" type="button" data-role="student">Студент</button>
+        <button class="role-tab" type="button" data-role="demo">Демо</button>
+      </div>
+      <div class="auth-fields">
+        <label class="auth-field sr-only">
+          <span>Роль</span>
+          <select id="login-role">
+            <option value="teacher" selected>Преподаватель</option>
+            <option value="student">Студент</option>
+            <option value="demo">Демо</option>
+          </select>
+        </label>
+        <label class="auth-field">
+          <span>Почта</span>
+          <input id="login-email" type="email" autocomplete="username" placeholder="name@example.com" />
+        </label>
+        <label class="auth-field">
+          <span>Пароль</span>
+          <input id="login-password" type="password" autocomplete="current-password" placeholder="Пароль" />
+        </label>
+      </div>
       <div class="auth-actions">
-        <div class="auth-google" id="google-button-gate"></div>
-        <div class="auth-hint" id="google-hint-gate"></div>
-        <button class="ghost auth-guest" id="btn-guest" type="button">Войти как гость</button>
+        <button class="send" id="btn-login" type="button">Войти</button>
+        <div class="auth-hint" id="login-hint"></div>
       </div>
     </div>
   </div>
@@ -56,7 +79,6 @@
           <button class="ghost focus-toggle" id="btn-focus" type="button" aria-pressed="false">Фокус</button>
           <a class="ghost" href="students.html">Студенты</a>
           <div class="auth">
-            <div class="auth-google" id="google-button"></div>
             <div class="auth-user" id="auth-user" hidden>
               <img class="auth-avatar" id="auth-avatar" alt="" />
               <div class="auth-meta">
@@ -65,7 +87,6 @@
               </div>
             </div>
             <button class="ghost auth-signout" id="btn-signout" type="button" hidden>Выйти</button>
-            <div class="auth-hint" id="google-hint"></div>
           </div>
         </div>
       </div>
@@ -82,7 +103,7 @@
       <div class="conversation" id="conversation">
         <div class="message assistant">
           <div class="message-role">Ассистент</div>
-          <div class="message-text">Здравствуйте! Я готов вести учет пропусков. Скажите, что сделать: зафиксировать пропуск, найти студента или сформировать отчет.</div>
+          <div class="message-text">Здравствуйте! Я готов вести учет пропусков. Скажите, что сделать: зафиксировать пропуск, найти студента или сформировать отчет</div>
         </div>
       </div>
 

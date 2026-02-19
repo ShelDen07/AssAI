@@ -31,11 +31,12 @@
   statusText: document.getElementById("status-text"),
   themeToggle: document.getElementById("btn-theme"),
   themeLabel: document.getElementById("theme-label"),
-  googleButton: document.getElementById("google-button"),
-  googleButtonGate: document.getElementById("google-button-gate"),
-  googleHint: document.getElementById("google-hint"),
-  googleHintGate: document.getElementById("google-hint-gate"),
-  btnGuest: document.getElementById("btn-guest"),
+  loginRole: document.getElementById("login-role"),
+  loginEmail: document.getElementById("login-email"),
+  loginPassword: document.getElementById("login-password"),
+  btnLogin: document.getElementById("btn-login"),
+  loginHint: document.getElementById("login-hint"),
+  roleTabs: document.querySelectorAll(".role-tab"),
   authUser: document.getElementById("auth-user"),
   authAvatar: document.getElementById("auth-avatar"),
   authName: document.getElementById("auth-name"),
@@ -44,13 +45,12 @@
 };
 
 const THEME_KEY = "assistant_theme";
-const GOOGLE_USER_KEY = "assistant_google_user";
+const AUTH_USER_KEY = "assistant_auth_user";
 const DRAFT_KEY = "assistant_draft";
 const FOCUS_KEY = "assistant_focus";
 const sessionId = initSession();
 let typingMessage = null;
 let recognitionActive = false;
-let googleInitialized = false;
 const state = {
   students: [],
   absences: [],
@@ -62,7 +62,7 @@ let toastTimer = null;
 const scenarioTemplates = {
   absences_student: "Покажи пропуски студента ФИО",
   record_absence: "Зафиксируй пропуск: ФИО, 03.02.2026, 2 занятия, причина — болезнь",
-  add_student: "Добавь студента: ФИО, группа (ГРУППА), контакт — name@gmail.com",
+  add_student: "Добавь студента: ФИО, группа (ГРУППА), контакт — name@gmail.com, баллы за пропуск — 2",
   report_group: "Сделай отчет по группе (ГРУППА) за (ЧИСЛО)",
 };
 
@@ -96,132 +96,138 @@ function initTheme() {
   }
 }
 
-function decodeJwt(token) {
-  if (!token) return null;
-  const parts = token.split(".");
-  if (parts.length < 2) return null;
-  const base = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base + "=".repeat((4 - (base.length % 4)) % 4);
-  try {
-    return JSON.parse(atob(padded));
-  } catch (err) {
-    return null;
-  }
-}
-
 function setAuthUser(user, persist = true) {
   document.body.dataset.auth = user ? "ready" : "required";
   if (persist) {
     if (user) {
-      localStorage.setItem(GOOGLE_USER_KEY, JSON.stringify(user));
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
     } else {
-      localStorage.removeItem(GOOGLE_USER_KEY);
+      localStorage.removeItem(AUTH_USER_KEY);
     }
   }
 
   if (ui.authUser) ui.authUser.hidden = !user;
   if (ui.btnSignOut) ui.btnSignOut.hidden = !user;
-  if (ui.googleButton) ui.googleButton.hidden = !!user;
-  if (ui.googleButtonGate) ui.googleButtonGate.hidden = !!user;
 
   if (ui.authAvatar) {
-    if (user && user.picture) {
-      ui.authAvatar.src = user.picture;
-      ui.authAvatar.alt = user.name || "Пользователь";
-      ui.authAvatar.hidden = false;
-    } else {
-      ui.authAvatar.hidden = true;
-      ui.authAvatar.removeAttribute("src");
-      ui.authAvatar.alt = "";
-    }
+    ui.authAvatar.hidden = true;
+    ui.authAvatar.removeAttribute("src");
+    ui.authAvatar.alt = "";
   }
 
-  if (ui.authName) ui.authName.textContent = user?.name || "—";
+  const roleLabel =
+    user?.role === "teacher"
+      ? "Преподаватель"
+      : user?.role === "student"
+        ? "Студент"
+        : "Демо";
+  if (ui.authName) ui.authName.textContent = user?.name || roleLabel || "—";
   if (ui.authEmail) ui.authEmail.textContent = user?.email || "";
-  if (ui.googleHint && user) ui.googleHint.textContent = "";
-  if (ui.googleHintGate && user) ui.googleHintGate.textContent = "";
+  if (ui.loginHint && user) ui.loginHint.textContent = "";
 }
 
-function handleCredentialResponse(response) {
-  if (!response || !response.credential) return;
-  const profile = decodeJwt(response.credential);
-  if (!profile) return;
-  setAuthUser({
-    name: profile.name,
-    email: profile.email,
-    picture: profile.picture,
-  });
+function showLoginHint(message) {
+  if (!ui.loginHint) return;
+  ui.loginHint.textContent = message;
 }
 
-function initGoogle() {
-  if (googleInitialized) return;
-  const clientId = (document.body?.dataset.googleClientId || "").trim();
-  if (!clientId || clientId === "YOUR_GOOGLE_CLIENT_ID") {
-    const hint = "Укажите Google Client ID в data-google-client-id.";
-    if (ui.googleHint) ui.googleHint.textContent = hint;
-    if (ui.googleHintGate) ui.googleHintGate.textContent = hint;
-    return;
-  }
-  if (!window.google || !google.accounts || !google.accounts.id) {
-    const hint = "Не удалось загрузить Google Identity Services.";
-    if (ui.googleHint) ui.googleHint.textContent = hint;
-    if (ui.googleHintGate) ui.googleHintGate.textContent = hint;
-    return;
-  }
-
-  googleInitialized = true;
-  google.accounts.id.initialize({
-    client_id: clientId,
-    callback: handleCredentialResponse,
-    auto_select: false,
-    cancel_on_tap_outside: true,
-  });
-
-  const buttonTargets = [ui.googleButton, ui.googleButtonGate].filter(Boolean);
-  buttonTargets.forEach((target) => {
-    google.accounts.id.renderButton(target, {
-      theme: "outline",
-      size: "large",
-      shape: "pill",
-      text: "signin_with",
+function updateLoginRole() {
+  if (!ui.loginRole) return;
+  const role = ui.loginRole.value;
+  const isDemo = role === "demo";
+  if (ui.roleTabs && ui.roleTabs.length) {
+    ui.roleTabs.forEach((tab) => {
+      tab.classList.toggle("active", tab.dataset.role === role);
     });
-  });
+  }
+  if (ui.loginEmail) {
+    ui.loginEmail.disabled = isDemo;
+    if (isDemo) ui.loginEmail.value = "";
+  }
+  if (ui.loginPassword) {
+    ui.loginPassword.disabled = isDemo;
+    if (isDemo) ui.loginPassword.value = "";
+  }
+  if (ui.loginHint && isDemo) {
+    ui.loginHint.textContent = "Демо-вход без почты и пароля.";
+  } else if (ui.loginHint) {
+    ui.loginHint.textContent = "";
+  }
+}
 
-  if (ui.googleHint) ui.googleHint.textContent = "";
-  if (ui.googleHintGate) ui.googleHintGate.textContent = "";
+async function loginWithCredentials() {
+  const role = ui.loginRole ? ui.loginRole.value : "teacher";
+  const email = ui.loginEmail ? ui.loginEmail.value.trim() : "";
+  const password = ui.loginPassword ? ui.loginPassword.value : "";
+
+  if (role !== "demo" && (!email || !password)) {
+    showLoginHint("Введите почту и пароль.");
+    return;
+  }
+
+  showLoginHint("Проверка данных...");
+
+  try {
+    const response = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, role }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      showLoginHint(payload.error || "Не удалось войти.");
+      return;
+    }
+    setAuthUser(payload.user || { email, role }, true);
+    if (ui.loginPassword) ui.loginPassword.value = "";
+  } catch (err) {
+    showLoginHint("Не удалось войти. Проверьте сервер.");
+  }
 }
 
 function initAuth() {
-  if (ui.btnGuest) {
-    ui.btnGuest.addEventListener("click", () => {
-      setAuthUser({ name: "Гость", email: "", picture: "" });
+  if (ui.roleTabs && ui.roleTabs.length) {
+    ui.roleTabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        if (ui.loginRole) ui.loginRole.value = tab.dataset.role || "teacher";
+        updateLoginRole();
+      });
     });
+  }
+  if (ui.btnLogin) {
+    ui.btnLogin.addEventListener("click", () => loginWithCredentials());
+  }
+  if (ui.loginPassword) {
+    ui.loginPassword.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        loginWithCredentials();
+      }
+    });
+  }
+  if (ui.loginEmail) {
+    ui.loginEmail.addEventListener("input", () => showLoginHint(""));
+  }
+  if (ui.loginRole) {
+    ui.loginRole.addEventListener("change", () => updateLoginRole());
   }
 
   if (ui.btnSignOut) {
     ui.btnSignOut.addEventListener("click", () => {
       setAuthUser(null);
-      if (window.google?.accounts?.id) {
-        google.accounts.id.disableAutoSelect();
-      }
     });
   }
 
-  const stored = localStorage.getItem(GOOGLE_USER_KEY);
+  const stored = localStorage.getItem(AUTH_USER_KEY);
   if (stored) {
     try {
       setAuthUser(JSON.parse(stored), false);
     } catch (err) {
-      localStorage.removeItem(GOOGLE_USER_KEY);
+      localStorage.removeItem(AUTH_USER_KEY);
     }
   }
 
-  window.handleCredentialResponse = handleCredentialResponse;
-  if (document.readyState === "complete") {
-    initGoogle();
-  } else {
-    window.addEventListener("load", initGoogle);
-  }
+  updateLoginRole();
 }
 
 function setStatus(state, text) {
@@ -468,7 +474,7 @@ function renderStudents(items = []) {
     const el = document.createElement("button");
     el.type = "button";
     el.className = "list-item ghost";
-    el.innerHTML = `${row.name} <span class="pill">${row.group}</span>`;
+    el.innerHTML = `${row.name} <span class="pill">${row.group}</span><span class="pill">ID ${row.id ?? "—"}</span>`;
     el.addEventListener("click", () => {
       ui.userInput.value = `Покажи пропуски студента ${row.name}`;
       ui.userInput.focus();
