@@ -41,7 +41,8 @@ FUNCTION_DECLARATIONS = [
       "properties": {
         "name": {"type": "string"},
         "group": {"type": "string"},
-        "contact": {"type": "string"}
+        "contact": {"type": "string"},
+        "absence_points": {"type": "integer"}
       },
       "required": ["name", "group"]
     }
@@ -119,10 +120,14 @@ def init_db():
         name TEXT NOT NULL,
         group_name TEXT NOT NULL,
         contact TEXT,
+        absence_points INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL
       )
       """
     )
+    columns = [row[1] for row in conn.execute("PRAGMA table_info(students)").fetchall()]
+    if "absence_points" not in columns:
+      conn.execute("ALTER TABLE students ADD COLUMN absence_points INTEGER NOT NULL DEFAULT 1")
     conn.execute(
       """
       CREATE TABLE IF NOT EXISTS absences (
@@ -190,6 +195,15 @@ def to_int_optional(value):
   except (TypeError, ValueError):
     return None
 
+def normalize_points(value, default=1):
+  if value is None or value == "":
+    return default
+  try:
+    points = int(value)
+  except (TypeError, ValueError):
+    return default
+  return max(0, points)
+
 def parse_bool(value):
   if value is None:
     return False
@@ -208,6 +222,7 @@ def export_students_json():
         "name": row.get("name"),
         "group": row.get("group_name"),
         "contact": row.get("contact", ""),
+        "absence_points": row.get("absence_points", 1),
         "created_at": row.get("created_at"),
       }
       for row in rows
@@ -252,9 +267,13 @@ def import_students_json(data):
     name = (row.get("name") or row.get("student") or row.get("full_name") or "").strip()
     group = (row.get("group") or row.get("group_name") or "").strip()
     contact = (row.get("contact") or row.get("email") or row.get("phone") or "").strip()
+    absence_points = normalize_points(
+      row.get("absence_points") or row.get("points") or row.get("points_per_absence"),
+      1
+    )
     if not name or not group:
       continue
-    create_student(name, group, contact)
+    create_student(name, group, contact, absence_points)
     count += 1
   return count
 
@@ -301,7 +320,7 @@ def import_absences_json(data):
       count += 1
   return count
 
-def create_student(name, group, contact=""):
+def create_student(name, group, contact="", absence_points=None):
   with DB_LOCK:
     conn = db_connect()
     existing = conn.execute(
@@ -309,15 +328,23 @@ def create_student(name, group, contact=""):
       (name, group),
     ).fetchone()
     if existing:
-      conn.execute("UPDATE students SET contact = ? WHERE id = ?", (contact or existing["contact"], existing["id"]))
+      next_contact = contact or existing["contact"]
+      next_points = existing["absence_points"] if "absence_points" in existing.keys() else 1
+      if absence_points is not None:
+        next_points = normalize_points(absence_points, next_points)
+      conn.execute(
+        "UPDATE students SET contact = ?, absence_points = ? WHERE id = ?",
+        (next_contact, next_points, existing["id"]),
+      )
       conn.commit()
       conn.close()
       return dict(existing)
 
     now = datetime.now().isoformat(timespec="seconds")
+    points = normalize_points(absence_points, 1)
     cursor = conn.execute(
-      "INSERT INTO students (name, group_name, contact, created_at) VALUES (?, ?, ?, ?)",
-      (name, group, contact, now),
+      "INSERT INTO students (name, group_name, contact, absence_points, created_at) VALUES (?, ?, ?, ?, ?)",
+      (name, group, contact, points, now),
     )
     conn.commit()
     student_id = cursor.lastrowid
@@ -325,7 +352,7 @@ def create_student(name, group, contact=""):
     conn.close()
     return dict(row)
 
-def update_student(student_id, name, group, contact=""):
+def update_student(student_id, name, group, contact="", absence_points=None):
   with DB_LOCK:
     conn = db_connect()
     existing = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
@@ -336,10 +363,13 @@ def update_student(student_id, name, group, contact=""):
     next_name = name or existing["name"]
     next_group = group or existing["group_name"]
     next_contact = contact if contact is not None else existing["contact"]
+    next_points = existing["absence_points"] if "absence_points" in existing.keys() else 1
+    if absence_points is not None:
+      next_points = normalize_points(absence_points, next_points)
 
     conn.execute(
-      "UPDATE students SET name = ?, group_name = ?, contact = ? WHERE id = ?",
-      (next_name, next_group, next_contact, student_id),
+      "UPDATE students SET name = ?, group_name = ?, contact = ?, absence_points = ? WHERE id = ?",
+      (next_name, next_group, next_contact, next_points, student_id),
     )
     conn.commit()
     row = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
@@ -350,15 +380,14 @@ def update_student(student_id, name, group, contact=""):
 def delete_student(student_id):
   with DB_LOCK:
     conn = db_connect()
-    count = conn.execute("SELECT COUNT(*) AS total FROM absences WHERE student_id = ?", (student_id,)).fetchone()["total"]
-    if count > 0:
-      conn.close()
-      return False, f"Нельзя удалить студента: есть пропуски ({count})."
-    conn.execute("DELETE FROM students WHERE id = ?", (student_id,))
+    conn.execute("DELETE FROM absences WHERE student_id = ?", (student_id,))
+    cursor = conn.execute("DELETE FROM students WHERE id = ?", (student_id,))
     conn.commit()
-    deleted = conn.total_changes > 0
+    deleted = cursor.rowcount > 0
     conn.close()
-    return deleted, None
+    if not deleted:
+      return False, "Студент не найден."
+    return True, None
 
 
 def find_students(query, group=None):
@@ -576,7 +605,12 @@ def generate_report(scope, target=None, date_from=None, date_to=None, unexcused_
 
 def handle_tool_call(name, args):
   if name == "add_student":
-    student = create_student(args.get("name", "").strip(), args.get("group", "").strip(), args.get("contact", ""))
+    student = create_student(
+      args.get("name", "").strip(),
+      args.get("group", "").strip(),
+      args.get("contact", ""),
+      args.get("absence_points"),
+    )
     action = f"Добавлен студент: {student['name']} ({student['group_name']})"
     return {"ok": True, "student": student}, action
 
@@ -794,6 +828,11 @@ class AssistantHandler(SimpleHTTPRequestHandler):
   def __init__(self, *args, **kwargs):
     super().__init__(*args, directory=str(BASE_DIR), **kwargs)
 
+  def end_headers(self):
+    self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+    self.send_header("Pragma", "no-cache")
+    super().end_headers()
+
   def _parse_path(self):
     parsed = urlparse(self.path)
     params = {key: values[0] for key, values in parse_qs(parsed.query).items()}
@@ -847,6 +886,7 @@ class AssistantHandler(SimpleHTTPRequestHandler):
     for row in rows:
       item = dict(row)
       item["group"] = item.get("group_name")
+      item["absence_points"] = item.get("absence_points", 1)
       students.append(item)
     self._send_json({"students": students})
 
@@ -858,10 +898,11 @@ class AssistantHandler(SimpleHTTPRequestHandler):
       name = (data.get("name") or "").strip()
       group = (data.get("group") or "").strip()
       contact = (data.get("contact") or "").strip()
+      absence_points = data.get("absence_points")
       if not name or not group:
         self._send_json({"error": "Нужно указать имя и группу."}, status=400)
         return
-      student = create_student(name, group, contact)
+      student = create_student(name, group, contact, absence_points)
       self._send_json({"ok": True, "student": student})
       return
 
@@ -873,10 +914,11 @@ class AssistantHandler(SimpleHTTPRequestHandler):
       name = (data.get("name") or "").strip()
       group = (data.get("group") or "").strip()
       contact = (data.get("contact") if data.get("contact") is not None else "").strip()
+      absence_points = data.get("absence_points")
       if not name or not group:
         self._send_json({"error": "Нужно указать имя и группу."}, status=400)
         return
-      student = update_student(student_id, name, group, contact)
+      student = update_student(student_id, name, group, contact, absence_points)
       if not student:
         self._send_json({"error": "Студент не найден."}, status=404)
         return
@@ -1014,6 +1056,8 @@ class AssistantHandler(SimpleHTTPRequestHandler):
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     self.send_response(status)
     self.send_header("Content-Type", "application/json; charset=utf-8")
+    self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+    self.send_header("Pragma", "no-cache")
     self.send_header("Content-Length", str(len(body)))
     self.end_headers()
     self.wfile.write(body)

@@ -9,6 +9,7 @@
   formTitle: document.getElementById("form-title"),
   formName: document.getElementById("form-name"),
   formGroup: document.getElementById("form-group"),
+  formPoints: document.getElementById("form-points"),
   formContact: document.getElementById("form-contact"),
   btnCancel: document.getElementById("btn-cancel"),
   metricTotal: document.getElementById("metric-total"),
@@ -58,6 +59,12 @@ function formatDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString("ru-RU");
+}
+
+function normalizePoints(value, fallback = 1) {
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed)) return fallback;
+  return Math.max(0, parsed);
 }
 
 function updateMetrics(allStudents) {
@@ -118,7 +125,8 @@ function renderList(rows) {
 
     const meta = document.createElement("div");
     meta.className = "student-meta";
-    meta.textContent = `Добавлен: ${formatDate(row.created_at)}`;
+    const points = normalizePoints(row.absence_points, 1);
+    meta.textContent = `Добавлен: ${formatDate(row.created_at)} • Баллы за пропуск: ${points}`;
 
     const actions = document.createElement("div");
     actions.className = "student-actions";
@@ -150,6 +158,9 @@ function setEditMode(row) {
   ui.formTitle.textContent = "Редактировать студента";
   ui.formName.value = row.name || "";
   ui.formGroup.value = row.group_name || row.group || "";
+  if (ui.formPoints) {
+    ui.formPoints.value = String(normalizePoints(row.absence_points, 1));
+  }
   ui.formContact.value = row.contact || "";
   ui.formName.focus();
 }
@@ -159,6 +170,9 @@ function clearForm() {
   ui.formTitle.textContent = "Добавить студента";
   ui.formName.value = "";
   ui.formGroup.value = "";
+  if (ui.formPoints) {
+    ui.formPoints.value = "1";
+  }
   ui.formContact.value = "";
 }
 
@@ -175,7 +189,7 @@ async function loadStudents() {
   const qs = buildQuery();
   const url = qs ? `/api/students?${qs}` : "/api/students";
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { cache: "no-store" });
     const payload = await response.json();
     const rows = payload.students || [];
     renderList(rows);
@@ -186,7 +200,7 @@ async function loadStudents() {
 
 async function refreshGroups() {
   try {
-    const response = await fetch("/api/students");
+    const response = await fetch("/api/students", { cache: "no-store" });
     const payload = await response.json();
     const rows = payload.students || [];
     updateGroupOptions(rows);
@@ -201,6 +215,7 @@ async function saveStudent() {
   const name = ui.formName.value.trim();
   const group = ui.formGroup.value.trim();
   const contact = ui.formContact.value.trim();
+  const absencePoints = normalizePoints(ui.formPoints?.value, 1);
   if (!name || !group) {
     showToast("Заполните имя и группу.");
     return;
@@ -212,6 +227,7 @@ async function saveStudent() {
     name,
     group,
     contact,
+    absence_points: absencePoints,
   };
 
   try {
