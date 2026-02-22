@@ -161,6 +161,20 @@ def init_db():
       )
       """
     )
+    conn.execute(
+      """
+      CREATE TABLE IF NOT EXISTS makeup_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        student_id INTEGER NOT NULL,
+        absence_id INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        note TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (student_id) REFERENCES students (id),
+        FOREIGN KEY (absence_id) REFERENCES absences (id)
+      )
+      """
+    )
     conn.execute("UPDATE absences SET type = 'семейная' WHERE type = 'уважительная'")
     conn.commit()
     conn.close()
@@ -480,11 +494,13 @@ def find_students(query, group=None):
     conn = db_connect()
     student_id = parse_student_id(query)
     if student_id is not None:
-      sql = "SELECT * FROM students WHERE (id = ? OR lower(name) LIKE ?)"
-      params = [student_id, f"%{query.lower()}%"]
+      sql = "SELECT * FROM students WHERE (id = ? OR lower(name) LIKE ? OR lower(contact) LIKE ?)"
+      like_query = f"%{query.lower()}%"
+      params = [student_id, like_query, like_query]
     else:
-      sql = "SELECT * FROM students WHERE lower(name) LIKE ?"
-      params = [f"%{query.lower()}%"]
+      sql = "SELECT * FROM students WHERE (lower(name) LIKE ? OR lower(contact) LIKE ?)"
+      like_query = f"%{query.lower()}%"
+      params = [like_query, like_query]
     if group:
       sql += " AND group_name = ?"
       params.append(group)
@@ -502,11 +518,13 @@ def list_students(query=None, group=None):
     if query:
       student_id = parse_student_id(query)
       if student_id is not None:
-        sql += " AND (id = ? OR lower(name) LIKE ?)"
-        params.extend([student_id, f"%{query.lower()}%"])
+        like_query = f"%{query.lower()}%"
+        sql += " AND (id = ? OR lower(name) LIKE ? OR lower(contact) LIKE ?)"
+        params.extend([student_id, like_query, like_query])
       else:
-        sql += " AND lower(name) LIKE ?"
-        params.append(f"%{query.lower()}%")
+        like_query = f"%{query.lower()}%"
+        sql += " AND (lower(name) LIKE ? OR lower(contact) LIKE ?)"
+        params.extend([like_query, like_query])
     if group:
       sql += " AND group_name = ?"
       params.append(group)
@@ -600,6 +618,75 @@ def list_absences(student_name=None, group=None, date_from=None, date_to=None, a
     rows = [dict(row) for row in conn.execute(sql, params).fetchall()]
     conn.close()
     return rows
+
+
+def list_makeup_requests(student_id=None):
+  with DB_LOCK:
+    conn = db_connect()
+    sql = """
+      SELECT mr.*, s.name, s.group_name, a.date, a.lessons, a.type, a.reason
+      FROM makeup_requests mr
+      JOIN students s ON s.id = mr.student_id
+      JOIN absences a ON a.id = mr.absence_id
+      WHERE 1=1
+    """
+    params = []
+    if student_id:
+      sql += " AND mr.student_id = ?"
+      params.append(student_id)
+    sql += " ORDER BY mr.created_at DESC"
+    rows = [dict(row) for row in conn.execute(sql, params).fetchall()]
+    conn.close()
+    return rows
+
+
+def create_makeup_request(student_id, absence_id, note=""):
+  with DB_LOCK:
+    conn = db_connect()
+    absence = conn.execute(
+      "SELECT * FROM absences WHERE id = ? AND student_id = ?",
+      (absence_id, student_id),
+    ).fetchone()
+    if not absence:
+      conn.close()
+      return None, "Пропуск не найден."
+
+    existing = conn.execute(
+      "SELECT * FROM makeup_requests WHERE absence_id = ? AND student_id = ? AND status = 'pending'",
+      (absence_id, student_id),
+    ).fetchone()
+    if existing:
+      row = conn.execute(
+        """
+        SELECT mr.*, s.name, s.group_name, a.date, a.lessons, a.type, a.reason
+        FROM makeup_requests mr
+        JOIN students s ON s.id = mr.student_id
+        JOIN absences a ON a.id = mr.absence_id
+        WHERE mr.id = ?
+        """,
+        (existing["id"],),
+      ).fetchone()
+      conn.close()
+      return dict(row) if row else dict(existing), None
+
+    now = datetime.now().isoformat(timespec="seconds")
+    cursor = conn.execute(
+      "INSERT INTO makeup_requests (student_id, absence_id, status, note, created_at) VALUES (?, ?, ?, ?, ?)",
+      (student_id, absence_id, "pending", note, now),
+    )
+    conn.commit()
+    row = conn.execute(
+      """
+      SELECT mr.*, s.name, s.group_name, a.date, a.lessons, a.type, a.reason
+      FROM makeup_requests mr
+      JOIN students s ON s.id = mr.student_id
+      JOIN absences a ON a.id = mr.absence_id
+      WHERE mr.id = ?
+      """,
+      (cursor.lastrowid,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None, None
 
 
 def student_stats(group=None, date_from=None, date_to=None):
@@ -987,6 +1074,9 @@ class AssistantHandler(SimpleHTTPRequestHandler):
     if path.startswith("/api/absences"):
       self._handle_absences(params)
       return
+    if path.startswith("/api/makeup-requests"):
+      self._handle_makeup_requests(params)
+      return
     if path.startswith("/api/export"):
       self._handle_export(params)
       return
@@ -1008,6 +1098,9 @@ class AssistantHandler(SimpleHTTPRequestHandler):
       return
     if path.startswith("/api/import"):
       self._handle_import()
+      return
+    if path.startswith("/api/makeup-requests"):
+      self._handle_makeup_requests_post()
       return
     self.send_error(404, "Not Found")
 
@@ -1091,6 +1184,34 @@ class AssistantHandler(SimpleHTTPRequestHandler):
       abs_type=abs_type or None,
     )
     self._send_json({"absences": rows})
+
+  def _handle_makeup_requests(self, params):
+    student_id = to_int_optional(params.get("student_id"))
+    rows = list_makeup_requests(student_id=student_id)
+    requests = []
+    for row in rows:
+      item = dict(row)
+      item["student_name"] = item.get("name")
+      item["group"] = item.get("group_name")
+      requests.append(item)
+    self._send_json({"requests": requests})
+
+  def _handle_makeup_requests_post(self):
+    data = self._read_json() or {}
+    student_id = to_int_optional(data.get("student_id"))
+    absence_id = to_int_optional(data.get("absence_id"))
+    note = (data.get("note") or "").strip()
+    if not student_id or not absence_id:
+      self._send_json({"error": "Нужно указать student_id и absence_id."}, status=400)
+      return
+    row, err = create_makeup_request(student_id, absence_id, note)
+    if err or not row:
+      self._send_json({"error": err or "Не удалось создать заявку."}, status=400)
+      return
+    item = dict(row)
+    item["student_name"] = item.get("name")
+    item["group"] = item.get("group_name")
+    self._send_json({"ok": True, "request": item})
 
   def _handle_export(self, params):
     export_type = (params.get("type") or "").strip().lower()

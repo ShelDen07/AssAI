@@ -9,6 +9,11 @@
       "email": "student@example.com",
       "password": "student123",
       "role": "student"
+    },
+    {
+      "email": "admin",
+      "password": "admin",
+      "role": "student"
     }
   ]
 }

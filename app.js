@@ -26,6 +26,7 @@
   btnExportAbsences: document.getElementById("btn-export-absences"),
   fileImportStudents: document.getElementById("file-import-students"),
   fileImportAbsences: document.getElementById("file-import-absences"),
+  makeupList: document.getElementById("makeup-list"),
   actionsList: document.getElementById("actions-list"),
   status: document.getElementById("status"),
   statusText: document.getElementById("status-text"),
@@ -54,10 +55,12 @@ let recognitionActive = false;
 const state = {
   students: [],
   absences: [],
+  makeupRequests: [],
 };
 let micAudioContext = null;
 let draftTimer = null;
 let toastTimer = null;
+let makeupPoller = null;
 
 const scenarioTemplates = {
   absences_student: "Покажи пропуски студента Фамилия Имя",
@@ -124,6 +127,19 @@ function setAuthUser(user, persist = true) {
   if (ui.authName) ui.authName.textContent = user?.name || roleLabel || "—";
   if (ui.authEmail) ui.authEmail.textContent = user?.email || "";
   if (ui.loginHint && user) ui.loginHint.textContent = "";
+
+  if (makeupPoller) {
+    window.clearInterval(makeupPoller);
+    makeupPoller = null;
+  }
+  if (user?.role === "teacher") {
+    loadMakeupRequests();
+    makeupPoller = window.setInterval(loadMakeupRequests, 20000);
+  }
+
+  if (user?.role === "student") {
+    window.location.href = "student.html";
+  }
 }
 
 function showLoginHint(message) {
@@ -498,6 +514,50 @@ function renderActions(items = []) {
     el.textContent = row;
     ui.actionsList.append(el);
   });
+}
+
+function renderMakeupRequests(items = []) {
+  if (!ui.makeupList) return;
+  ui.makeupList.innerHTML = "";
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "list-item";
+    empty.textContent = "Заявок пока нет.";
+    ui.makeupList.append(empty);
+    return;
+  }
+
+  items.forEach((row) => {
+    const el = document.createElement("div");
+    el.className = "list-item";
+    const date = row.date ? formatDate(row.date) : "—";
+    const lessons = row.lessons ?? 0;
+    const reason = row.reason ? ` • ${row.reason}` : "";
+    el.innerHTML = `
+      <strong>${row.student_name || "Студент"} <span class="pill">${row.group || "—"}</span></strong><br />
+      ${date} • ${lessons} занятий • ${row.type || "—"}${reason}<br />
+      <span class="mini">Статус: ${row.status || "ожидает"}</span>
+    `;
+    ui.makeupList.append(el);
+  });
+}
+
+async function loadMakeupRequests() {
+  if (!ui.makeupList) return;
+  try {
+    const response = await fetch("/api/makeup-requests", { cache: "no-store" });
+    const payload = await response.json();
+    const rows = payload.requests || [];
+    const prevIds = new Set(state.makeupRequests.map((item) => item.id));
+    const hasNew = rows.some((row) => !prevIds.has(row.id));
+    state.makeupRequests = rows;
+    renderMakeupRequests(rows);
+    if (hasNew && prevIds.size > 0) {
+      showToast("Новая заявка на отработку.");
+    }
+  } catch (err) {
+    renderMakeupRequests([]);
+  }
 }
 
 function formatDate(value) {

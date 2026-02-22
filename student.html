@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Мои пропуски</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    (function () {
+      const stored = localStorage.getItem("assistant_theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const theme = stored || (prefersDark ? "dark" : "light");
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
+  <script defer src="student.js"></script>
+</head>
+<body data-auth="required">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="mesh"></div>
+
+  <div class="auth-gate">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-lock">Доступ по роли</div>
+        <h2>Вход в систему</h2>
+        <p>Войдите как студент, чтобы увидеть свои пропуски.</p>
+      </div>
+      <div class="auth-role-tabs" id="login-role-tabs">
+        <button class="role-tab" type="button" data-role="student">Студент</button>
+        <button class="role-tab" type="button" data-role="teacher">Преподаватель</button>
+        <button class="role-tab" type="button" data-role="demo">Демо</button>
+      </div>
+      <div class="auth-fields">
+        <label class="auth-field sr-only">
+          <span>Роль</span>
+          <select id="login-role">
+            <option value="student" selected>Студент</option>
+            <option value="teacher">Преподаватель</option>
+            <option value="demo">Демо</option>
+          </select>
+        </label>
+        <label class="auth-field">
+          <span>Почта</span>
+          <input id="login-email" type="email" autocomplete="username" placeholder="name@example.com" />
+        </label>
+        <label class="auth-field">
+          <span>Пароль</span>
+          <input id="login-password" type="password" autocomplete="current-password" placeholder="Пароль" />
+        </label>
+      </div>
+      <div class="auth-actions">
+        <button class="send" id="btn-login" type="button">Войти</button>
+        <div class="auth-hint" id="login-hint"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand brand-link" href="https://edu.aspc.kz/login/index.php">
+        <img class="brand-mark" src="img/channels4_profile.jpg" alt="Polytech College Almaty" />
+        <div>
+          <div class="brand-title">IA Polytech</div>
+          <div class="brand-subtitle">Мои пропуски</div>
+        </div>
+      </a>
+      <div class="topbar-right">
+        <div class="topbar-actions">
+          <button class="theme-toggle" id="btn-theme" type="button" aria-pressed="false">
+            <span class="theme-track"></span>
+            <span class="theme-label" id="theme-label">Светлая</span>
+          </button>
+          <div class="auth">
+            <div class="auth-user" id="auth-user" hidden>
+              <img class="auth-avatar" id="auth-avatar" alt="" />
+              <div class="auth-meta">
+                <div class="auth-name" id="auth-name">—</div>
+                <div class="auth-email" id="auth-email">—</div>
+              </div>
+            </div>
+            <button class="ghost auth-signout" id="btn-signout" type="button" hidden>Выйти</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="student-shell">
+      <section class="card student-hero">
+        <div class="student-hero-top">
+          <div>
+            <div class="eyebrow">Студент</div>
+            <h1>Мои пропуски</h1>
+            <p>Здесь отображаются только ваши пропуски.</p>
+          </div>
+          <div class="student-metrics">
+            <div class="metric">
+              <strong id="metric-total">0</strong>
+              <span>Всего пропусков</span>
+            </div>
+            <div class="metric">
+              <strong id="metric-points">0</strong>
+              <span>Всего баллов</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Список пропусков</h3>
+        <div id="absences-list" class="list"></div>
+        <div class="mini" id="absences-hint"></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
