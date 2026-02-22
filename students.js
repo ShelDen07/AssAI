@@ -250,14 +250,14 @@ function renderList(rows) {
     return;
   }
 
-  rows.forEach((row) => {
+  rows.forEach((row, index) => {
     const card = document.createElement("div");
     card.className = "student-row";
 
     const main = document.createElement("div");
     main.className = "student-main";
     const name = document.createElement("strong");
-    name.textContent = row.name || "—";
+    name.textContent = `${index + 1}. ${row.name || "—"}`;
     const contact = document.createElement("span");
     contact.className = "student-contact";
     contact.textContent = row.contact || "—";

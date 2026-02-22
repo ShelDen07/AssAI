@@ -60,7 +60,7 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="brand">
-        <div class="brand-mark">IA</div>
+        <img class="brand-mark" src="polytech-logo.png" alt="Polytech College Almaty" />
         <div>
           <div class="brand-title">Управление студентами</div>
           <div class="brand-subtitle">Справочник и группы</div>
@@ -110,7 +110,7 @@
 
       <section class="card">
         <div class="student-toolbar">
-          <input id="student-query" type="text" placeholder="Поиск по ФИО или ID" />
+          <input id="student-query" type="text" placeholder="Поиск по фамилии и имени или ID" />
           <select id="student-group">
             <option value="all">Все группы</option>
           </select>
@@ -128,7 +128,7 @@
       <section class="card">
         <h3 id="form-title">Добавить студента</h3>
         <form id="student-form" class="student-form">
-          <input id="form-name" type="text" placeholder="ФИО" required />
+          <input id="form-name" type="text" placeholder="Фамилия и имя" required />
           <input id="form-group" type="text" placeholder="Группа" required />
           <input id="form-points" type="number" min="0" step="1" placeholder="Баллы за пропуск" inputmode="numeric" value="1" />
           <input id="form-contact" type="text" placeholder="Контакт (email / телефон)" />

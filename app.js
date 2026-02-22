@@ -60,9 +60,9 @@ let draftTimer = null;
 let toastTimer = null;
 
 const scenarioTemplates = {
-  absences_student: "Покажи пропуски студента ФИО",
-  record_absence: "Зафиксируй пропуск: ФИО, 03.02.2026, 2 занятия, причина — болезнь",
-  add_student: "Добавь студента: ФИО, группа (ГРУППА), контакт — name@gmail.com, баллы за пропуск — 2",
+  absences_student: "Покажи пропуски студента Фамилия Имя",
+  record_absence: "Зафиксируй пропуск: Фамилия Имя, 03.02.2026, 2 занятия, причина — болезнь",
+  add_student: "Добавь студента: Фамилия Имя, группа (ГРУППА), контакт — name@gmail.com, баллы за пропуск — 2",
   report_group: "Сделай отчет по группе (ГРУППА) за (ЧИСЛО)",
 };
 
@@ -470,11 +470,11 @@ function renderStudents(items = []) {
     ui.studentsList.append(empty);
     return;
   }
-  items.forEach((row) => {
+  items.forEach((row, index) => {
     const el = document.createElement("button");
     el.type = "button";
     el.className = "list-item ghost";
-    el.innerHTML = `${row.name} <span class="pill">${row.group}</span><span class="pill">ID ${row.id ?? "—"}</span>`;
+    el.innerHTML = `${index + 1}. ${row.name} <span class="pill">${row.group}</span><span class="pill">ID ${row.id ?? "—"}</span>`;
     el.addEventListener("click", () => {
       ui.userInput.value = `Покажи пропуски студента ${row.name}`;
       ui.userInput.focus();
