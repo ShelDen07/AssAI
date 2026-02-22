@@ -59,13 +59,13 @@
 
   <div class="app-shell">
     <header class="topbar">
-      <div class="brand">
-        <img class="brand-mark" src="polytech-logo.png" alt="Polytech College Almaty" />
+      <a class="brand brand-link" href="https://edu.aspc.kz/login/index.php">
+        <img class="brand-mark" src="img/channels4_profile.jpg" alt="Polytech College Almaty" />
         <div>
-          <div class="brand-title">Интеллектуальный ассистент</div>
+          <div class="brand-title">IA Polytech</div>
           <div class="brand-subtitle">Обработка пропущенных учебных дней</div>
         </div>
-      </div>
+      </a>
       <div class="topbar-right">
         <div class="status" id="status">
           <span class="status-dot" id="status-dot"></span>
@@ -112,7 +112,7 @@
           <span class="mic-core"></span>
         </button>
         <div class="input-wrap">
-          <input id="user-input" type="text" placeholder="Например: Зафиксируй пропуск Иванова 03.02.2026, 2 пары, причина — болезнь" />
+          <input id="user-input" type="text" placeholder="Например: Зафиксируй пропуск Иванова 03.02.2026, 2 пары, причина — медицинская" />
           <div class="input-hint">Нажмите Enter для отправки или используйте микрофон</div>
         </div>
         <button class="send" id="btn-send">Отправить</button>
@@ -134,24 +134,6 @@
         <button class="ghost" id="btn-copy" type="button">Скопировать диалог</button>
       </div>
 
-      <div class="quick-cards">
-        <button class="quick-card" data-prompt="Покажи пропуски студента Иванов Иван">
-          <span class="quick-title">Пропуски студента</span>
-          <span class="quick-meta">Список за выбранный период</span>
-        </button>
-        <button class="quick-card" data-prompt="Зафиксируй пропуск: Иванов Иван, 03.02.2026, 2 занятия, причина — болезнь">
-          <span class="quick-title">Новый пропуск</span>
-          <span class="quick-meta">Записать причину и дату</span>
-        </button>
-        <button class="quick-card" data-prompt="Сделай отчет по группе ИС-21 за январь 2026">
-          <span class="quick-title">Отчет по группе</span>
-          <span class="quick-meta">Сводка и риски</span>
-        </button>
-        <button class="quick-card" data-prompt="Кто в группе ПО-22 в зоне риска?">
-          <span class="quick-title">Риски по группе</span>
-          <span class="quick-meta">Топ студентов</span>
-        </button>
-      </div>
     </section>
 
     <aside class="side-panel">
@@ -170,7 +152,7 @@
           <select id="filter-type">
             <option value="all">Все типы</option>
             <option value="неуважительная">Неуважительная</option>
-            <option value="уважительная">Уважительная</option>
+            <option value="семейная">Семейная</option>
             <option value="медицинская">Медицинская</option>
           </select>
           <input id="filter-from" type="date" />
@@ -186,10 +168,10 @@
       <div class="card">
         <h3>Быстрые команды</h3>
         <div class="chips">
-          <button class="chip" data-prompt="Покажи пропуски студента Иванов Иван">Пропуски студента</button>
-          <button class="chip" data-prompt="Сделай отчет по группе ИС-21 за январь 2026">Отчет по группе</button>
-          <button class="chip" data-prompt="Кто в группе ПО-22 в зоне риска?">Риски по группе</button>
-          <button class="chip" data-prompt="Зафиксируй пропуск: Петров Петр, 03.02.2026, 1 занятие, причина — семейные">Добавить пропуск</button>
+          <button class="chip" data-prompt="Покажи пропуски студента Фамилия Имя или ID" data-autosend="false">Пропуски студента</button>
+          <button class="chip" data-prompt="Сделай отчет по группе ГРУППА за месяц (например: январь 2026)" data-autosend="false">Отчет по группе</button>
+          <button class="chip" data-prompt="Кто в группе ГРУППА в зоне риска?" data-autosend="false">Риски по группе</button>
+          <button class="chip" data-prompt="Зафиксируй пропуск: Фамилия Имя или ID, 03.02.2026, 1 занятие, причина — семейная" data-autosend="false">Добавить пропуск</button>
         </div>
       </div>
 

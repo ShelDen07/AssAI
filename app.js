@@ -61,7 +61,7 @@ let toastTimer = null;
 
 const scenarioTemplates = {
   absences_student: "Покажи пропуски студента Фамилия Имя",
-  record_absence: "Зафиксируй пропуск: Фамилия Имя, 03.02.2026, 2 занятия, причина — болезнь",
+  record_absence: "Зафиксируй пропуск: Фамилия Имя, 03.02.2026, 2 занятия, причина — медицинская",
   add_student: "Добавь студента: Фамилия Имя, группа (ГРУППА), контакт — name@gmail.com, баллы за пропуск — 2",
   report_group: "Сделай отчет по группе (ГРУППА) за (ЧИСЛО)",
 };
@@ -705,6 +705,10 @@ function bindShortcuts() {
     chip.addEventListener("click", () => {
       const prompt = chip.dataset.prompt || "";
       ui.userInput.value = prompt;
+      if (chip.dataset.autosend === "false") {
+        ui.userInput.focus();
+        return;
+      }
       sendMessage(prompt);
     });
   });

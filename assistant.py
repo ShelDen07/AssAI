@@ -87,7 +87,7 @@ FUNCTION_DECLARATIONS = [
         "student_id": {"type": "integer"},
         "date": {"type": "string"},
         "lessons": {"type": "integer"},
-        "type": {"type": "string", "enum": ["неуважительная", "уважительная", "медицинская"]},
+        "type": {"type": "string", "enum": ["неуважительная", "семейная", "медицинская"]},
         "reason": {"type": "string"},
         "doc": {"type": "boolean"}
       },
@@ -161,6 +161,7 @@ def init_db():
       )
       """
     )
+    conn.execute("UPDATE absences SET type = 'семейная' WHERE type = 'уважительная'")
     conn.commit()
     conn.close()
 
@@ -240,6 +241,16 @@ def parse_bool(value):
     return value
   raw = str(value).strip().lower()
   return raw in {"1", "true", "yes", "y", "да", "истина", "t"}
+
+def normalize_absence_type(value):
+  if value is None:
+    return ""
+  raw = str(value).strip().lower()
+  if raw == "уважительная":
+    return "семейная"
+  if raw in {"неуважительная", "семейная", "медицинская"}:
+    return raw
+  return ""
 
 
 def load_users():
@@ -386,9 +397,7 @@ def import_absences_json(data):
 
     date_value = row.get("date") or row.get("absence_date")
     lessons = to_int(row.get("lessons") or row.get("lesson_count"), 1)
-    abs_type = (row.get("type") or "неуважительная").strip().lower()
-    if abs_type not in {"неуважительная", "уважительная", "медицинская"}:
-      abs_type = "неуважительная"
+    abs_type = normalize_absence_type(row.get("type")) or "неуважительная"
     reason = row.get("reason") or ""
     doc = parse_bool(row.get("doc") or row.get("has_doc"))
 
@@ -759,7 +768,7 @@ def handle_tool_call(name, args):
 
     lessons = to_int(args.get("lessons", 1), 1)
     lessons = max(1, min(10, lessons))
-    abs_type = args.get("type", "неуважительная")
+    abs_type = normalize_absence_type(args.get("type")) or "неуважительная"
     row = record_absence(student_id, args.get("date"), lessons, abs_type, args.get("reason", ""), args.get("doc", False))
     if not row:
       return {"ok": False, "error": "Не удалось записать пропуск. Проверьте дату и данные."}, None
@@ -1069,9 +1078,11 @@ class AssistantHandler(SimpleHTTPRequestHandler):
     group = (params.get("group") or "").strip()
     if group == "all":
       group = ""
-    abs_type = (params.get("type") or "").strip()
-    if abs_type == "all":
+    raw_type = (params.get("type") or "").strip()
+    if raw_type == "all":
       abs_type = ""
+    else:
+      abs_type = normalize_absence_type(raw_type)
     rows = list_absences(
       student_name=params.get("student_name"),
       group=group or None,
